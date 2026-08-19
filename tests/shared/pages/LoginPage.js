@@ -1,10 +1,8 @@
 const { expect } = require('@playwright/test');
 
 /**
- * Shared LoginPage.
- * This is intentionally reusable and is never generated under a Jira ticket.
- *
- * Replace the selectors below with the real application's stable selectors.
+ * Shared Login Page Object.
+ * Source requirement: reusable login/authentication functionality.
  */
 class LoginPage {
   constructor(page) {
@@ -26,6 +24,10 @@ class LoginPage {
 
   async expectLoggedIn() {
     await expect(this.page).not.toHaveURL(/\/login(?:$|[/?])/);
+  }
+
+  async expectValidationMessage(message) {
+    await expect(this.page.getByText(message)).toBeVisible();
   }
 }
 
