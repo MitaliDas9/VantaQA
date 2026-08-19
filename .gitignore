@@ -1,0 +1,8 @@
+node_modules/
+!.env.example
+playwright-report/
+test-results/
+blob-report/
+artifacts/
+coverage/
+.DS_Store

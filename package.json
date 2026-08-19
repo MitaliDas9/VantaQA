@@ -1,0 +1,30 @@
+{
+  "name": "vantaqa-playwright-jira-framework",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VantaQA hackathon scaffold: Jira-driven Playwright JavaScript automation with shared components, Jira subtasks, healing hooks, triage and GitHub Actions reporting.",
+  "scripts": {
+    "pw:install": "playwright install --with-deps",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "jira:generate": "node src/cli/generate-from-jira.js",
+    "jira:dry-run": "node src/cli/generate-from-jira.js --dry-run",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "code:review": "node src/review/code-reviewer.js",
+    "ci:report": "node src/notifications/gmail-reporter.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "eslint": "^9.35.0",
+    "prettier": "^3.6.2"
+  },
+  "dependencies": {
+    "axios": "^1.11.0",
+    "dotenv": "^17.2.1",
+    "nodemailer": "^7.0.5"
+  }
+}

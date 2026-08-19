@@ -1,0 +1,12 @@
+Given Jira key SCRUM-123, the generated layout is:
+
+tests/jira/SCRUM-123/
+  pages/
+    <SummaryAsPascalCase>Page.js
+  specs/
+    SCRUM-123.spec.js
+  data/
+    test-data.json
+  README.md
+
+Manual test cases are created as Jira sub-tasks under SCRUM-123 and are NOT created here.
