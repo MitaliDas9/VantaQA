@@ -18,9 +18,93 @@ function splitScenarios(text) {
   return candidates.length ? candidates : [text || 'Verify the Jira requirement'];
 }
 
+function extractAcceptanceCriteria(text) {
+  const normalized = (text || '').replace(/\r/g, '');
+  const lines = normalized
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  const found = [];
+  let insideAcceptanceSection = false;
+
+  for (const line of lines) {
+    const isSectionMarker = /acceptance criteria|acceptance criterion|criteria/i.test(line);
+    if (isSectionMarker) {
+      insideAcceptanceSection = true;
+      continue;
+    }
+
+    if (insideAcceptanceSection) {
+      const match = line.match(/^(?:\d+[\).]|\d+\.|[a-z][\).]|[-*]\s*)?\s*(.+)$/i);
+      const value = match ? match[1].trim() : line.trim();
+
+      if (value && /(?:must|should|can|will|verify|validate|user can|system|page|user)/i.test(value)) {
+        found.push(value.replace(/\s+/g, ' '));
+      }
+    }
+  }
+
+  if (found.length) return found;
+
+  const fallback = lines.filter(line =>
+    /^(?:\d+[\).]|\d+\.|[a-z][\).]|[-*]\s*)?\s*(?:given|when|then|must|should|verify|validate|user can|system|page)/i.test(line)
+  );
+
+  return fallback.map(line => line.replace(/^(?:\d+[\).]|\d+\.|[a-z][\).]|[-*]\s*)/i, '').trim());
+}
+
+function detectLayerFromText(text) {
+  const value = (text || '').toLowerCase();
+
+  if (/invalid|empty|required|boundary|negative|error|incorrect|missing|validate|validation/.test(value)) {
+    return 'Validation';
+  }
+  if (/unauthori|permission|role|access|credential|password|session|authorization|security/.test(value)) {
+    return 'Security';
+  }
+  if (/response time|latency|throughput|load|performance|under .* second|seconds?/.test(value)) {
+    return 'Performance';
+  }
+  if (/browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/.test(value)) {
+    return 'Compatibility';
+  }
+  return 'Functional';
+}
+
+function buildAcceptanceCriterionCases(issue, criteria) {
+  return criteria.map((criterion, index) => {
+    const cleaned = criterion.replace(/^[\d\-\)\]\s.]+/, '').trim();
+    const title = cleaned || `Verify ${issue.summary}`;
+    const layer = detectLayerFromText(title);
+
+    return {
+      id: `AC-${String(index + 1).padStart(2, '0')}`,
+      layer,
+      source: 'Acceptance Criteria',
+      title: `Verify ${title.charAt(0).toLowerCase() + title.slice(1)}`,
+      steps: [
+        'Open the feature under test.',
+        `Perform the behavior described by: "${title}".`,
+        'Validate the result against the expected outcome.'
+      ],
+      expected: title
+    };
+  });
+}
+
+function isExplicitLoginStory(issue) {
+  const summary = (issue.summary || '').toLowerCase();
+
+  // Only treat the ticket as a login story when the summary itself is clearly
+  // about authentication or sign-in behavior. This avoids misclassifying
+  // unrelated stories that happen to mention login in the description or as a
+  // precondition for a different workflow.
+  return /\b(login|log in|sign in|signin|authentication|authenticate|access management)\b/.test(summary);
+}
+
 function isLoginRequirement(issue) {
-  const text = `${issue.summary}\n${issue.description}`.toLowerCase();
-  return /login|log in|sign in|signin|authentication|authenticate|credentials|password/.test(text);
+  return isExplicitLoginStory(issue);
 }
 
 function identifyLayers(text) {
@@ -243,32 +327,36 @@ function buildDerivedTestCases(issue, layers, gaps) {
 function analyzeRequirement(issue) {
   const text = `${issue.summary}\n${issue.description}`;
   const scenarios = splitScenarios(text);
+  const acceptanceCriteria = extractAcceptanceCriteria(text);
   const gaps = [];
 
-  if (!/acceptance|given|when|then|should|must|verify|validate/i.test(text)) {
+  if (!acceptanceCriteria.length) {
     gaps.push('Acceptance criteria or explicit expected behavior is missing.');
   }
-  if (!/error|invalid|negative|boundary|exception/i.test(text)) {
+  if (!acceptanceCriteria.some(c => /error|invalid|negative|boundary|empty|required|exception/i.test(c))) {
     gaps.push('Negative/boundary scenarios are not explicit.');
   }
-  if (!/security|permission|role|access|authentication|authorization|login|credential|password|session/i.test(text)) {
+  if (!acceptanceCriteria.some(c => /security|permission|role|access|authentication|authorization|login|credential|password|session|unauthori/i.test(c))) {
     gaps.push('Security/access-control coverage is not explicit.');
   }
-  if (!/browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/i.test(text)) {
+  if (!acceptanceCriteria.some(c => /browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/i.test(c))) {
     gaps.push('Compatibility/browser coverage is not explicit.');
   }
-  if (!/performance|latency|load|response time|throughput|concurrent|under .* second|seconds?/i.test(text)) {
+  if (!acceptanceCriteria.some(c => /performance|latency|load|response time|throughput|concurrent|under .* second|seconds?/i.test(c))) {
     gaps.push('Performance/response-time coverage is not explicit.');
   }
 
   const layers = identifyLayers(text);
-  const testCases = buildDerivedTestCases(issue, layers, gaps);
+  const testCases = acceptanceCriteria.length
+    ? buildAcceptanceCriterionCases(issue, acceptanceCriteria)
+    : buildDerivedTestCases(issue, layers, gaps);
 
   // The test matrix is the authoritative layer output. Ensure each layer represented
   // by a generated case is visible even when the original Jira text did not name it.
   const generatedLayers = unique(testCases.map(tc => tc.layer));
   return {
     scenarios,
+    acceptanceCriteria,
     gaps,
     layers: LAYERS.filter(layer => generatedLayers.includes(layer)),
     testCases,

@@ -25,12 +25,32 @@ async function dryRun(issueKey) {
   console.log(JSON.stringify({
     issue: issue.key,
     summary: issue.summary,
+    acceptanceCriteriaCount: (analysis.acceptanceCriteria || []).length,
+    acceptanceCriteria: analysis.acceptanceCriteria || [],
     layers: analysis.layers,
     gaps: analysis.gaps,
     testCases: analysis.testCases,
     automationFeasible: analysis.automationFeasible,
     reusableComponent: analysis.reusableComponent
   }, null, 2));
+
+  const mappedTitles = (analysis.testCases || []).map(tc => `${tc.id} [${tc.layer}] ${tc.title}`);
+  console.log(`Mapped ${mappedTitles.length} generated tests from acceptance criteria / derived coverage:`);
+  mappedTitles.forEach(title => console.log(` - ${title}`));
+
+  const coverageSummary = {
+    acceptanceCriteriaCount: (analysis.acceptanceCriteria || []).length,
+    gaps: analysis.gaps || [],
+    missingCoverageByCategory: {
+      validation: !(analysis.acceptanceCriteria || []).some(c => /error|invalid|negative|boundary|empty|required|exception/i.test(c)),
+      security: !(analysis.acceptanceCriteria || []).some(c => /security|permission|role|access|authentication|authorization|login|credential|password|session|unauthori/i.test(c)),
+      compatibility: !(analysis.acceptanceCriteria || []).some(c => /browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/i.test(c)),
+      performance: !(analysis.acceptanceCriteria || []).some(c => /performance|latency|load|response time|throughput|concurrent|under .* second|seconds?/i.test(c))
+    },
+    reusableComponent: analysis.reusableComponent
+  };
+
+  console.log('Coverage gap summary:', JSON.stringify(coverageSummary, null, 2));
 
   const service = new JiraTestCaseService(jira);
   const subtasks = await service.createManualTestSubtasks(issue, analysis, true);
