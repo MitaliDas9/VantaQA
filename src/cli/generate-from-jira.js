@@ -30,7 +30,8 @@ function validateJiraKey(key) {
 async function dryRun(issueKey) {
   const jira = new JiraClient();
   const issue = normalizeIssue(await jira.getIssue(issueKey));
-  const analysis = await new AIProvider().enrich(issue, analyzeRequirement(issue));
+  const expandAC = !process.argv.includes('--no-expand-ac');
+  const analysis = await new AIProvider().enrich(issue, analyzeRequirement(issue, { expandAC }));
 
   console.log(JSON.stringify({
     issue: issue.key,

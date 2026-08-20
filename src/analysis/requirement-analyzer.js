@@ -110,7 +110,24 @@ function parseAcceptanceCriterion(criterion, index) {
 }
 
 function buildAcceptanceCriterionCases(issue, criteria) {
-  return criteria.map((criterion, index) => parseAcceptanceCriterion(criterion, index));
+  const layersToExpand = ['Functional', 'Validation', 'Security', 'Performance'];
+
+  return criteria.flatMap((criterion, index) => {
+    const baseIndex = index + 1;
+    const baseId = `AC-${String(baseIndex).padStart(2, '0')}`;
+    const parsed = parseAcceptanceCriterion(criterion, index);
+    const titleBody = parsed.title.replace(/^Verify\s+/i, '').trim();
+
+    // For each AC produce one layer-specific test case with full layer name suffix
+    return layersToExpand.map(layer => ({
+      id: `${baseId}-${layer.toUpperCase()}`,
+      layer,
+      source: 'Acceptance Criteria',
+      title: `Verify ${titleBody} (${layer})`,
+      steps: parsed.steps,
+      expected: parsed.expected
+    }));
+  });
 }
 
 function isExplicitLoginStory(issue) {
@@ -344,7 +361,7 @@ function buildDerivedTestCases(issue, layers, gaps) {
   });
 }
 
-function analyzeRequirement(issue) {
+function analyzeRequirement(issue, options = {}) {
   const text = `${issue.summary}\n${issue.description}`;
   const scenarios = splitScenarios(text);
   const acceptanceCriteria = extractAcceptanceCriteria(text);
@@ -367,9 +384,33 @@ function analyzeRequirement(issue) {
   }
 
   const layers = identifyLayers(text);
-  const testCases = acceptanceCriteria.length
-    ? buildAcceptanceCriterionCases(issue, acceptanceCriteria)
-    : buildDerivedTestCases(issue, layers, gaps);
+  // Always include derived STLC coverage. When acceptance criteria exist,
+  // generate one test per AC and also add the derived baseline layer cases
+  // (Functional/Validation/Compatibility/Security/Performance) to ensure
+  // every Jira story has STLC-recommended coverage and negative/validation
+  // scenarios even if the ACs are specific.
+  const expandAC = options.expandAC !== false;
+  const acCases = acceptanceCriteria.length
+    ? (expandAC ? buildAcceptanceCriterionCases(issue, acceptanceCriteria) : acceptanceCriteria.map((c, i) => parseAcceptanceCriterion(c, i)))
+    : [];
+  const derived = buildDerivedTestCases(issue, layers, gaps);
+
+  // Merge but avoid exact duplicate (id + title) collisions.
+  const seen = new Set();
+  const merged = [];
+  for (const tc of [...acCases, ...derived]) {
+    const key = `${tc.id}:${tc.title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(tc);
+  }
+
+  // If we expanded ACs into per-AC functional cases, suppress the generic
+  // derived `FUNC-001` to avoid duplication of functional coverage.
+  const hasPerAcFunctional = merged.some(tc => /AC-\d+-FUNCTIONAL$/i.test(tc.id));
+  const final = hasPerAcFunctional ? merged.filter(tc => !(tc.id === 'FUNC-001' && tc.layer === 'Functional')) : merged;
+
+  const testCases = final;
 
   // The test matrix is the authoritative layer output. Ensure each layer represented
   // by a generated case is visible even when the original Jira text did not name it.
