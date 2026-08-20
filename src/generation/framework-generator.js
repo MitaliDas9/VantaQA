@@ -13,7 +13,7 @@ class FrameworkGenerator {
     this.rootDir = rootDir;
   }
 
-  generate(issue, analysis) {
+  generate(issue, analysis, locatorConfig = {}) {
     if (!issue?.key) {
       throw new Error('Jira issue key is required. No files will be generated without a Jira key.');
     }
@@ -21,13 +21,13 @@ class FrameworkGenerator {
     // Reusable functionality is stored in shared and must never be duplicated
     // under a Jira ticket folder. Login is currently the shared reusable component.
     if (analysis.reusableComponent) {
-      return this.generateSharedLogin(issue, analysis);
+      return this.generateSharedLogin(issue, analysis, locatorConfig);
     }
 
-    return this.generateFeature(issue, analysis);
+    return this.generateFeature(issue, analysis, locatorConfig);
   }
 
-  generateFeature(issue, analysis) {
+  generateFeature(issue, analysis, locatorConfig = {}) {
     const ticketDir = path.join(this.rootDir, 'tests', 'jira', issue.key);
     const pagesDir = path.join(ticketDir, 'pages');
     const specsDir = path.join(ticketDir, 'specs');
@@ -43,7 +43,7 @@ class FrameworkGenerator {
 
     fs.writeFileSync(
       pageFile,
-      pageObjectTemplate(className, issue.key, issue.summary),
+      pageObjectTemplate(className, issue.key, issue.summary, locatorConfig),
       'utf8'
     );
 
@@ -71,7 +71,7 @@ class FrameworkGenerator {
     };
   }
 
-  generateSharedLogin(issue, analysis) {
+  generateSharedLogin(issue, analysis, locatorConfig = {}) {
     const sharedPagesDir = path.join(this.rootDir, 'tests', 'shared', 'pages');
     const sharedSpecsDir = path.join(this.rootDir, 'tests', 'shared', 'tests');
     fs.mkdirSync(sharedPagesDir, { recursive: true });

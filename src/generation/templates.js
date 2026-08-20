@@ -5,21 +5,52 @@ function pascalCase(value) {
     .replace(/[^a-zA-Z0-9]/g, '') || 'Feature';
 }
 
-function pageObjectTemplate(className, issueKey, summary) {
+function pageObjectTemplate(className, issueKey, summary, locatorConfig = {}) {
+  const locator = (name, fallback) => {
+    const value = locatorConfig?.[name] || locatorConfig?.[name.toLowerCase()];
+    if (typeof value === 'string' && value.trim()) return value;
+    return fallback;
+  };
+
+  const pimLocator = locator('pim', "page.getByRole('link', { name: /PIM/i })");
+  const searchLocator = locator('searchInput', "page.getByPlaceholder('Search')");
+  const searchButtonLocator = locator('searchButton', "page.getByRole('button', { name: /Search/i })");
+  const resetButtonLocator = locator('resetButton', "page.getByRole('button', { name: /Reset/i })");
+  const tableLocator = locator('tableRows', "page.locator('table tbody tr')");
+
   return `const { expect } = require('@playwright/test');
 
 /**
  * Generated from ${issueKey}: ${summary}
- * Replace placeholder selectors with stable application selectors.
+ * Runtime locators can be injected with --locators or --live-locators.
  */
 class ${className} {
   constructor(page) {
     this.page = page;
     this.heading = page.getByRole('heading', { name: /replace me/i });
+    this.pimMenu = ${pimLocator};
+    this.searchInput = ${searchLocator};
+    this.searchButton = ${searchButtonLocator};
+    this.resetButton = ${resetButtonLocator};
+    this.employeeRows = ${tableLocator};
   }
 
   async goto() {
-    await this.page.goto('/replace-me');
+    await this.page.goto('/web/index.php/pim/viewEmployeeList');
+  }
+
+  async openPim() {
+    await this.pimMenu.click();
+    await expect(this.page).toHaveURL(/\/pim\//);
+  }
+
+  async searchByName(value) {
+    await this.searchInput.fill(value);
+    await this.searchButton.click();
+  }
+
+  async resetSearch() {
+    await this.resetButton.click();
   }
 
   async verifyLoaded() {

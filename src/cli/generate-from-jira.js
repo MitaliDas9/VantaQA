@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
 const { JiraClient } = require('../jira/jira-client');
 const { normalizeIssue } = require('../jira/jira-mapper');
 const { analyzeRequirement } = require('../analysis/requirement-analyzer');
@@ -27,10 +30,53 @@ function validateJiraKey(key) {
   return /^[A-Z][A-Z0-9]+-\d+$/.test(key || '');
 }
 
+function readLocatorFile(filePath) {
+  const resolved = path.resolve(process.cwd(), filePath);
+  const raw = fs.readFileSync(resolved, 'utf8');
+  const parsed = JSON.parse(raw);
+
+  if (parsed?.suggestions) return parsed.suggestions;
+  if (parsed?.locators) return parsed.locators;
+  return parsed;
+}
+
+function loadLiveLocators() {
+  const repoRoot = path.resolve(__dirname, '../..');
+  const result = spawnSync(process.execPath, ['scripts/fetch_orangehrm_playwright.js'], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (result.status !== 0) {
+    throw new Error(result.stderr || 'Live locator fetch failed');
+  }
+
+  const parsed = JSON.parse(result.stdout || '{}');
+  return parsed.suggestions || parsed.locators || parsed;
+}
+
+function resolveLocatorConfig() {
+  if (process.argv.includes('--live-locators')) {
+    return loadLiveLocators();
+  }
+
+  const locatorFile = getArg('--locators');
+  if (locatorFile) {
+    return readLocatorFile(locatorFile);
+  }
+
+  return {};
+}
+
 async function dryRun(issueKey) {
   const jira = new JiraClient();
   const issue = normalizeIssue(await jira.getIssue(issueKey));
   const expandAC = !process.argv.includes('--no-expand-ac');
+  const locatorConfig = resolveLocatorConfig();
   const analysis = await new AIProvider().enrich(issue, analyzeRequirement(issue, { expandAC }));
 
   console.log(JSON.stringify({
@@ -75,8 +121,11 @@ async function dryRun(issueKey) {
   const subtasks = await service.createManualTestSubtasks(issue, analysis, true);
   console.log(`Dry-run manual test cases: ${subtasks.length}`);
 
-  const generated = new FrameworkGenerator().generate(issue, analysis);
+  const generated = new FrameworkGenerator().generate(issue, analysis, locatorConfig);
   console.log(`Dry-run automation generated at: ${generated.ticketDir || generated.pageFile}`);
+  if (Object.keys(locatorConfig).length) {
+    console.log('Runtime locators used:', JSON.stringify(locatorConfig, null, 2));
+  }
 }
 
 async function main() {
@@ -87,6 +136,8 @@ async function main() {
     throw new Error('A valid Jira key is required. Example: npm run jira:generate -- SCRUM-123');
   }
 
+  const locatorConfig = resolveLocatorConfig();
+
   if (dryRunFlag) {
     return dryRun(issueKey);
   }
@@ -94,10 +145,23 @@ async function main() {
   // Real generation runs the complete STLC automation orchestration:
   // main -> EH-<jira> branch -> Jira manual subtasks -> automation -> code review
   // -> local Playwright -> push -> PR -> GitHub checks -> auto merge -> main pipeline.
-  return require('../automation/jira-orchestrator').main(issueKey);
+  return require('../automation/jira-orchestrator').main(issueKey, locatorConfig);
 }
 
-main().catch(error => {
-  console.error(error.response?.data || error.stack || error.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    console.error(error.response?.data || error.stack || error.message);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  getArg,
+  resolveIssueKey,
+  validateJiraKey,
+  readLocatorFile,
+  loadLiveLocators,
+  resolveLocatorConfig,
+  main,
+  dryRun
+};
