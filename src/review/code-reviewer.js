@@ -21,6 +21,21 @@ function review(root = process.cwd()) {
   for (const file of sourceFiles) {
     const content = fs.readFileSync(file, 'utf8');
 
+    // Hard gate: generated JavaScript must parse before any PR can be created.
+    if (file.endsWith('.js')) {
+      const { spawnSync } = require('child_process');
+      const syntax = spawnSync(process.execPath, ['--check', file], {
+        encoding: 'utf8'
+      });
+      if (syntax.status !== 0) {
+        findings.push({
+          severity: 'BLOCKER',
+          file,
+          message: `JavaScript syntax error: ${(syntax.stderr || syntax.stdout || '').trim()}`
+        });
+      }
+    }
+
     if (/password\s*=\s*['"][^'"]+['"]/i.test(content)) {
       findings.push({ severity: 'BLOCKER', file, message: 'Possible hard-coded password.' });
     }

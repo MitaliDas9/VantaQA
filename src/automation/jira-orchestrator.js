@@ -59,7 +59,7 @@ async function waitForChecks(github, sha, timeoutMs = 15 * 60 * 1000) {
   throw new Error('Timed out waiting for GitHub Actions checks.');
 }
 
-async function main(issueKey) {
+async function main(issueKey, locatorConfig = {}) {
   if (!validateJiraKey(issueKey)) {
     throw new Error('Usage: npm run jira:generate -- SCRUM-123');
   }
@@ -91,7 +91,7 @@ async function main(issueKey) {
   // 3. Manual tests are created in Jira; automation is generated in the repository.
   const testcaseService = new JiraTestCaseService(jira);
   const manualTests = await testcaseService.createManualTestSubtasks(issue, analysis, false);
-  const generated = new FrameworkGenerator().generate(issue, analysis);
+  const generated = new FrameworkGenerator().generate(issue, analysis, locatorConfig);
 
   // 4. Automated code review before commit/PR.
   const reviewResult = review();

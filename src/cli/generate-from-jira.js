@@ -129,11 +129,18 @@ async function dryRun(issueKey) {
 }
 
 async function main() {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log('Usage: npm run jira:generate -- SCRUM-123');
+    console.log('       node src/cli/generate-from-jira.js --issue SCRUM-123');
+    console.log('       node src/cli/generate-from-jira.js SCRUM-123');
+    return;
+  }
+
   const issueKey = resolveIssueKey();
   const dryRunFlag = process.argv.includes('--dry-run');
 
   if (!issueKey || !validateJiraKey(issueKey)) {
-    throw new Error('A valid Jira key is required. Example: npm run jira:generate -- SCRUM-123');
+    throw new Error('A valid Jira key is required. Example: npm run jira:generate -- SCRUM-123 (recommended) or node src/cli/generate-from-jira.js --issue SCRUM-123');
   }
 
   const locatorConfig = resolveLocatorConfig();
