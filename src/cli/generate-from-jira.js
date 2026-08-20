@@ -13,6 +13,16 @@ function getArg(name) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+function resolveIssueKey() {
+  const issueFromFlag = getArg('--issue');
+  if (issueFromFlag) return issueFromFlag;
+
+  const directArg = process.argv.find(arg => validateJiraKey(arg));
+  if (directArg) return directArg;
+
+  return undefined;
+}
+
 function validateJiraKey(key) {
   return /^[A-Z][A-Z0-9]+-\d+$/.test(key || '');
 }
@@ -38,6 +48,14 @@ async function dryRun(issueKey) {
   console.log(`Mapped ${mappedTitles.length} generated tests from acceptance criteria / derived coverage:`);
   mappedTitles.forEach(title => console.log(` - ${title}`));
 
+  const acMapping = (analysis.testCases || [])
+    .filter(tc => /^AC-/i.test(tc.id))
+    .map(tc => ({ id: tc.id, title: tc.title, layer: tc.layer, expected: tc.expected }));
+  if (acMapping.length) {
+    console.log('AC-to-test mapping:');
+    acMapping.forEach(item => console.log(` - ${item.id} -> ${item.title} [${item.layer}] Expected: ${item.expected}`));
+  }
+
   const coverageSummary = {
     acceptanceCriteriaCount: (analysis.acceptanceCriteria || []).length,
     gaps: analysis.gaps || [],
@@ -61,7 +79,7 @@ async function dryRun(issueKey) {
 }
 
 async function main() {
-  const issueKey = getArg('--issue') || process.argv.find(a => validateJiraKey(a));
+  const issueKey = resolveIssueKey();
   const dryRunFlag = process.argv.includes('--dry-run');
 
   if (!issueKey || !validateJiraKey(issueKey)) {

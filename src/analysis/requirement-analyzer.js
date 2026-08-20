@@ -19,39 +19,39 @@ function splitScenarios(text) {
 }
 
 function extractAcceptanceCriteria(text) {
-  const normalized = (text || '').replace(/\r/g, '');
-  const lines = normalized
+  const normalized = (text || '')
+    .replace(/\r/g, '')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s*\n\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const blocks = [];
+  const matcher = /(?:^|\s)(AC\s*\d+\s*[-:]?\s*.*?(?=\s+AC\s*\d+\s*[-:]?|$))/gi;
+  let match;
+
+  while ((match = matcher.exec(normalized)) !== null) {
+    const item = match[0].trim();
+    if (item && /Given|When|Then|should|must|can|verify|validate|user/i.test(item)) {
+      blocks.push(item);
+    }
+  }
+
+  if (blocks.length) {
+    return blocks.map(block => block.replace(/^AC\s*\d+\s*[-:]?\s*/i, '').trim());
+  }
+
+  const lines = (text || '')
+    .replace(/\r/g, '')
     .split(/\n+/)
     .map(line => line.trim())
     .filter(Boolean);
 
-  const found = [];
-  let insideAcceptanceSection = false;
-
-  for (const line of lines) {
-    const isSectionMarker = /acceptance criteria|acceptance criterion|criteria/i.test(line);
-    if (isSectionMarker) {
-      insideAcceptanceSection = true;
-      continue;
-    }
-
-    if (insideAcceptanceSection) {
-      const match = line.match(/^(?:\d+[\).]|\d+\.|[a-z][\).]|[-*]\s*)?\s*(.+)$/i);
-      const value = match ? match[1].trim() : line.trim();
-
-      if (value && /(?:must|should|can|will|verify|validate|user can|system|page|user)/i.test(value)) {
-        found.push(value.replace(/\s+/g, ' '));
-      }
-    }
-  }
-
-  if (found.length) return found;
-
   const fallback = lines.filter(line =>
-    /^(?:\d+[\).]|\d+\.|[a-z][\).]|[-*]\s*)?\s*(?:given|when|then|must|should|verify|validate|user can|system|page)/i.test(line)
+    /(?:AC\s*\d+|Given|When|Then|must|should|verify|validate|user can)/i.test(line)
   );
 
-  return fallback.map(line => line.replace(/^(?:\d+[\).]|\d+\.|[a-z][\).]|[-*]\s*)/i, '').trim());
+  return fallback.map(line => line.replace(/^AC\s*\d+\s*[-:]?\s*/i, '').trim());
 }
 
 function detectLayerFromText(text) {
@@ -72,25 +72,45 @@ function detectLayerFromText(text) {
   return 'Functional';
 }
 
-function buildAcceptanceCriterionCases(issue, criteria) {
-  return criteria.map((criterion, index) => {
-    const cleaned = criterion.replace(/^[\d\-\)\]\s.]+/, '').trim();
-    const title = cleaned || `Verify ${issue.summary}`;
-    const layer = detectLayerFromText(title);
+function parseAcceptanceCriterion(criterion, index) {
+  const text = (criterion || '').replace(/\s+/g, ' ').trim();
+  const acMatch = text.match(/^AC\s*\d+\s*[-–:]?\s*(.*)$/i);
+  const labelPart = acMatch ? acMatch[1].trim() : text;
 
-    return {
-      id: `AC-${String(index + 1).padStart(2, '0')}`,
-      layer,
-      source: 'Acceptance Criteria',
-      title: `Verify ${title.charAt(0).toLowerCase() + title.slice(1)}`,
-      steps: [
-        'Open the feature under test.',
-        `Perform the behavior described by: "${title}".`,
-        'Validate the result against the expected outcome.'
-      ],
-      expected: title
-    };
-  });
+  const titleMatch = labelPart.match(/^(.*?)(?=\s+(?:Given|When|Then)\b|$)/i);
+  const titleValue = (titleMatch ? titleMatch[1].trim() : labelPart).replace(/^[-–:\s]+/, '').trim();
+  const title = titleValue || `Verify ${criterion}`;
+
+  const givenMatch = text.match(/Given\s+(.+?)(?=\s+When\b)/i);
+  const whenMatch = text.match(/When\s+(.+?)(?=\s+Then\b)/i);
+  const thenMatch = text.match(/Then\s+(.+?)(?=\s+(?:Given|When|Then|$))/i);
+
+  const steps = [];
+  if (givenMatch) steps.push(`Given ${givenMatch[1].trim()}`);
+  if (whenMatch) steps.push(`When ${whenMatch[1].trim()}`);
+  if (thenMatch) steps.push(`Then ${thenMatch[1].trim()}`);
+
+  if (!steps.length) {
+    steps.push('Open the feature under test.');
+    steps.push(`Perform the requested behavior: "${title}".`);
+    steps.push('Validate the result matches the expected outcome.');
+  }
+
+  const expected = thenMatch ? thenMatch[1].trim() : title;
+  const layer = detectLayerFromText(text + ' ' + title + ' ' + expected);
+
+  return {
+    id: `AC-${String(index + 1).padStart(2, '0')}`,
+    layer,
+    source: 'Acceptance Criteria',
+    title: `Verify ${title.charAt(0).toLowerCase() + title.slice(1)}`,
+    steps,
+    expected
+  };
+}
+
+function buildAcceptanceCriterionCases(issue, criteria) {
+  return criteria.map((criterion, index) => parseAcceptanceCriterion(criterion, index));
 }
 
 function isExplicitLoginStory(issue) {

@@ -12,6 +12,7 @@
     "report": "playwright show-report",
     "jira:generate": "node src/cli/generate-from-jira.js",
     "jira:dry-run": "node src/cli/generate-from-jira.js --dry-run",
+    "jira:generate:issue": "node src/cli/generate-from-jira.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "code:review": "node src/review/code-reviewer.js",
