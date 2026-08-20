@@ -7,3 +7,10 @@ blob-report/
 artifacts/
 coverage/
 .DS_Store
+
+# Ignore generated Jira feature artifacts created by dry-run/generator
+tests/jira/*/pages/
+tests/jira/*/specs/
+tests/jira/*/data/
+# Keep top-level placeholder
+!tests/jira/.gitkeep
