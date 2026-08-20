@@ -27,7 +27,7 @@ function pageObjectTemplate(className, issueKey, summary, locatorConfig = {}) {
 class ${className} {
   constructor(page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { name: /replace me/i });
+    this.heading = page.locator('table');
     this.pimMenu = ${pimLocator};
     this.searchInput = ${searchLocator};
     this.searchButton = ${searchButtonLocator};
@@ -36,12 +36,15 @@ class ${className} {
   }
 
   async goto() {
-    await this.page.goto('/web/index.php/pim/viewEmployeeList');
+    await this.page.goto('/');
+    await this.pimMenu.click();
+    await this.page.waitForURL(/\/web\/index.php\/pim\/viewEmployeeList/);
   }
 
   async openPim() {
+    await this.page.goto('/');
     await this.pimMenu.click();
-    await expect(this.page).toHaveURL(/\/pim\//);
+    await this.page.waitForURL(/\/web\/index.php\/pim\/viewEmployeeList/);
   }
 
   async searchByName(value) {
@@ -54,6 +57,7 @@ class ${className} {
   }
 
   async verifyLoaded() {
+    await expect(this.page).toHaveURL(/\/pim\/viewEmployeeList/);
     await expect(this.heading).toBeVisible();
   }
 }

@@ -9,14 +9,18 @@ test.describe('Shared Login - SCRUM-1', () => {
   test.describe('Functional', () => {
 
     test('[FUNC-001][Functional] Verify successful login with valid credentials', async ({ page }) => {
-      const loginPage = new LoginPage(page);
-      // 1. Open the login page.
-      // 2. Enter valid username/email.
-      // 3. Enter valid password.
-      // 4. Click Login/Sign in.
-      await loginPage.goto();
-      // TODO: Replace with application-specific data/actions.
-      // Expected: User is authenticated and redirected to the authenticated landing page.
+        const loginPage = new LoginPage(page);
+        // 1. Open the login page.
+        await loginPage.goto();
+        // 2-4. If env credentials are present, perform explicit login and verify.
+        const user = process.env.TEST_USER_EMAIL;
+        const pass = process.env.TEST_USER_PASSWORD;
+        if (user && pass) {
+          await loginPage.login(user, pass);
+          await loginPage.expectLoggedIn();
+        } else {
+          // Fallback: leave manual login steps for tester
+        }
     });
   });
 
