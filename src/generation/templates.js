@@ -12,10 +12,9 @@ const ALLOWED_TEST_LAYERS = new Set([
 ]);
 
 function normalizeLayer(value) {
-  const layer =
-    String(value || 'Functional')
-      .trim()
-      .toLowerCase();
+  const layer = String(value || 'Functional')
+    .trim()
+    .toLowerCase();
 
   if (layer === 'functional') {
     return 'Functional';
@@ -29,12 +28,9 @@ function normalizeLayer(value) {
 }
 
 function isAllowedTestLayer(testCase) {
-  const layer =
-    String(
-      testCase?.layer || 'Functional'
-    )
-      .trim()
-      .toLowerCase();
+  const layer = String(testCase?.layer || 'Functional')
+    .trim()
+    .toLowerCase();
 
   return ALLOWED_TEST_LAYERS.has(layer);
 }
@@ -44,9 +40,7 @@ function filterAllowedTestCases(testCases) {
     return [];
   }
 
-  return testCases.filter(
-    isAllowedTestLayer
-  );
+  return testCases.filter(isAllowedTestLayer);
 }
 
 function pascalCase(value) {
@@ -67,7 +61,7 @@ function pascalCase(value) {
 }
 
 function escapeString(value) {
-  return String(value)
+  return String(value ?? '')
     .replace(/\\/g, '\\\\')
     .replace(/'/g, "\\'");
 }
@@ -86,13 +80,6 @@ function normalizeText(value) {
 
 function lowerText(value) {
   return normalizeText(value).toLowerCase();
-}
-
-function isPerformanceLayer(testCase) {
-  return (
-    lowerText(testCase?.layer) ===
-    'performance'
-  );
 }
 
 function testCaseText(testCase) {
@@ -134,7 +121,7 @@ function hasAny(text, values) {
  *
  *   tests/shared/pages/PIMPage.js
  *
- * This page contains feature-specific functionality only.
+ * Employee search for this feature uses Employee Id 0400.
  */
 
 function pageObjectTemplate(
@@ -153,47 +140,73 @@ function pageObjectTemplate(
         name?.toLowerCase?.()
       ];
 
-    if (typeof value === 'string' && value.trim()) {
+    if (
+      typeof value === 'string' &&
+      value.trim()
+    ) {
       return value;
     }
 
     return fallback;
   };
 
-  const employeeIdLocator = locator(
-    'employeeIdInput',
-    "page.getByLabel('Employee Id', { exact: true })"
-  );
+  const employeeIdLocator =
+    locator(
+      'employeeIdInput',
+      "page.getByLabel('Employee Id', { exact: true })"
+    );
 
-  const searchLocator = locator(
-    'searchInput',
-    "page.getByPlaceholder('Search')"
-  );
+  const searchLocator =
+    locator(
+      'searchInput',
+      "page.getByPlaceholder('Search')"
+    );
 
-  const searchButtonLocator = locator(
-    'searchButton',
-    "page.getByRole('button', { name: /Search/i })"
-  );
+  const searchButtonLocator =
+    locator(
+      'searchButton',
+      "page.getByRole('button', { name: /Search/i })"
+    );
 
-  const resetButtonLocator = locator(
-    'resetButton',
-    "page.getByRole('button', { name: /Reset/i })"
-  );
+  const resetButtonLocator =
+    locator(
+      'resetButton',
+      "page.getByRole('button', { name: /Reset/i })"
+    );
 
-  const tableLocator = locator(
-    'tableRows',
-    "page.locator('table tbody tr')"
-  );
+  const tableRowsLocator =
+    locator(
+      'tableRows',
+      "page.locator('.oxd-table-body .oxd-table-card')"
+    );
+
+  const tableLocator =
+    locator(
+      'table',
+      "page.locator('.oxd-table')"
+    );
+
+  const noRecordsLocator =
+    locator(
+      'noRecords',
+      "page.getByText(/No Records Found/i)"
+    );
 
   return `const { expect } = require('@playwright/test');
 
 /**
- * Generated from ${issueKey}: ${summary}
+ * Jira: ${escapeTemplateComment(issueKey)}
+ * Summary: ${escapeTemplateComment(summary)}
  *
- * This Page Object contains only feature-specific interactions.
- * Reusable functionality such as login belongs under tests/shared.
+ * This page object contains feature-specific PIM Employee List
+ * functionality only.
+ *
+ * Authentication is supplied by:
+ *   tests/shared/fixtures/authenticated.js
+ *
+ * PIM navigation is supplied by:
+ *   tests/shared/pages/PIMPage.js
  */
-
 class ${className} {
 
   constructor(page) {
@@ -206,36 +219,24 @@ class ${className} {
     this.searchInput =
       ${searchLocator};
 
-    this.searchInput = ${searchLocator};
-    this.searchButton = ${searchButtonLocator};
-    this.resetButton = ${resetButtonLocator};
+    this.searchButton =
+      ${searchButtonLocator};
 
-    this.employeeRows = ${tableLocator};
-  }
+    this.resetButton =
+      ${resetButtonLocator};
 
-  async goto() {
-    await this.page.goto('/');
-    await this.pimMenu.click();
+    this.employeeRows =
+      ${tableRowsLocator};
 
-    await this.page.waitForURL(
-      /\\/web\\/index\\.php\\/pim\\/viewEmployeeList/
-    );
-  }
+    this.employeeTable =
+      ${tableLocator};
 
-  async openPim() {
-    await this.page.goto('/');
-    await this.pimMenu.click();
-
-    await this.page.waitForURL(
-      /\\/web\\/index\\.php\\/pim\\/viewEmployeeList/
-    );
+    this.noRecordsMessage =
+      ${noRecordsLocator};
   }
 
   /**
-   * Search employee by Employee Id.
-   *
-   * Default generated test data:
-   *   0400
+   * Search the Employee List by Employee Id.
    */
   async searchByEmployeeId(value) {
 
@@ -247,9 +248,7 @@ class ${className} {
   }
 
   /**
-   * Search employee by name.
-   *
-   * Kept available for feature reuse.
+   * Search the Employee List by name.
    */
   async searchByName(value) {
 
@@ -260,11 +259,17 @@ class ${className} {
     await this.searchButton.click();
   }
 
+  /**
+   * Clear the current Employee List search criteria.
+   */
   async resetSearch() {
 
     await this.resetButton.click();
   }
 
+  /**
+   * Return the number of displayed employee records.
+   */
   async getEmployeeRowCount() {
 
     return this.employeeRows.count();
@@ -282,7 +287,7 @@ class ${className} {
   }
 
   /**
-   * Assert that at least one employee record exists.
+   * Assert that at least one employee record is displayed.
    */
   async expectEmployeeRecordsDisplayed() {
 
@@ -300,27 +305,25 @@ class ${className} {
     const rowCount =
       await this.getEmployeeRowCount();
 
-    if (rowCount > 0) {
+    if (rowCount === 0) {
 
       await expect(
-        this.employeeRows.first(),
-        'Expected no employee records after the search.'
-      ).not.toBeVisible();
+        this.noRecordsMessage,
+        'Expected "No Records Found" message.'
+      ).toBeVisible();
 
       return;
     }
 
     await expect(
-      this.noRecordsMessage,
-      'Expected "No Records Found" message.'
-    ).toBeVisible();
+      this.employeeRows.first(),
+      'Expected no employee records after the search.'
+    ).not.toBeVisible();
   }
 
   /**
-   * Assert that a matching employee record is visible.
-   *
-   * OrangeHRM renders employee records as:
-   *   .oxd-table-body .oxd-table-card
+   * Assert that an employee record containing
+   * the supplied value is visible.
    */
   async expectEmployeeRecordVisible(
     value
@@ -329,20 +332,37 @@ class ${className} {
     const matchingRow =
       this.employeeRows
         .filter({
-          hasText: value
+          hasText: String(value)
         })
         .first();
 
     await expect(
       matchingRow,
-      \`Expected employee record "\\${value}" to be visible.\`
+      \`Expected employee record "\${value}" to be visible.\`
     ).toBeVisible();
   }
 
   /**
-   * Assert that the search input contains the supplied value.
+   * Assert that the Employee Id field
+   * contains the supplied value.
    */
-  async expectSearchValue(value) {
+  async expectEmployeeIdValue(
+    value
+  ) {
+
+    await expect(
+      this.employeeIdInput,
+      'Expected the Employee Id field to contain the search value.'
+    ).toHaveValue(value);
+  }
+
+  /**
+   * Assert that the generic search field
+   * contains the supplied value.
+   */
+  async expectSearchValue(
+    value
+  ) {
 
     await expect(
       this.searchInput,
@@ -352,7 +372,9 @@ class ${className} {
 
 }
 
-module.exports = { ${className} };
+module.exports = {
+  ${className}
+};
 `;
 }
 
@@ -361,13 +383,11 @@ module.exports = { ${className} };
  * SCENARIO ACTION GENERATION
  * ------------------------------------------------------------
  *
- * IMPORTANT:
+ * Only Functional and Validation scenarios are supported.
  *
- * Only Functional and Validation scenarios are generated.
- *
- * Performance, Security and Compatibility scenarios
- * are deliberately rejected here as a second layer of
- * protection.
+ * Security, Performance and Compatibility scenarios
+ * are rejected defensively even if stale Jira analysis
+ * contains them.
  */
 
 function scenarioActions(
@@ -375,7 +395,9 @@ function scenarioActions(
   pageClass,
   requiresPIMNavigation = false
 ) {
-  if (!isAllowedTestLayer(testCase)) {
+  if (
+    !isAllowedTestLayer(testCase)
+  ) {
     return '';
   }
 
@@ -396,7 +418,8 @@ function scenarioActions(
       'employee search',
       'search employee',
       'search employees',
-      'display employee'
+      'display employee',
+      'employee information'
     ]);
 
   const isSearch =
@@ -407,7 +430,6 @@ function scenarioActions(
       'search by name',
       'search by employee id',
       'employee id',
-      'search functionality',
       'matching employee',
       'matching employees'
     ]);
@@ -479,10 +501,10 @@ function scenarioActions(
     lines.push(`
       await pimPage.openEmployeeList();
 
-    // Security coverage validates that the protected feature is reachable
-    // only through the expected authenticated application flow.
-    await featurePage.verifyLoaded();
-`;
+      await expect(page).toHaveURL(
+        /\\/web\\/index\\.php\\/pim\\/viewEmployeeList/
+      );
+`);
   }
 
   /**
@@ -490,7 +512,13 @@ function scenarioActions(
    * EMPLOYEE ID SEARCH
    * ----------------------------------------------------------
    *
-   * Employee Id 0400 is stored in testData.
+   * Employee Id is taken from:
+   *
+   *   testData.employeeId
+   *
+   * Default:
+   *
+   *   0400
    */
 
   if (isSearch) {
@@ -606,7 +634,7 @@ function scenarioActions(
               exact: false
             }
           ).first(),
-          \`Expected validation message: \\${validationMessage}\`
+          \`Expected validation message: \${validationMessage}\`
         ).toBeVisible();
 
       } else {
@@ -632,10 +660,7 @@ function scenarioActions(
   if (isVisible) {
 
     lines.push(`
-      await expect(
-        featurePage.employeeTable,
-        'Expected the feature content to be visible.'
-      ).toBeVisible();
+      await featurePage.expectEmployeeTableVisible();
 `);
 
     return lines.join('\n');
@@ -648,9 +673,7 @@ function scenarioActions(
    */
 
   lines.push(`
-      await expect(
-        page
-      ).toHaveURL(
+      await expect(page).toHaveURL(
         /\\/web\\/index\\.php\\//
       );
 `);
@@ -668,6 +691,7 @@ function buildTestTitle(
   testCase,
   scenarioIndex
 ) {
+
   const id =
     normalizeText(
       testCase?.id || 'TC'
@@ -685,46 +709,9 @@ function buildTestTitle(
       'Generated test'
     );
 
-    expect(
-      elapsedMs,
-      \`Feature load exceeded \${thresholdMs}ms\`
-    ).toBeLessThanOrEqual(thresholdMs);
-`;
-  }
-
-  if (layer === 'compatibility') {
-    return `
-    await featurePage.goto();
-    await featurePage.verifyLoaded();
-
-    // Browser coverage is provided by Playwright projects
-    // configured in playwright.config.js.
-`;
-  }
-
-  if (title.includes('search')) {
-    return `
-    await featurePage.goto();
-    await featurePage.verifyLoaded();
-
-    await featurePage.searchByName('Admin');
-`;
-  }
-
-  if (title.includes('clear') || title.includes('reset')) {
-    return `
-    await featurePage.goto();
-    await featurePage.verifyLoaded();
-
-    await featurePage.searchByName('Admin');
-    await featurePage.resetSearch();
-`;
-  }
-
-  return `
-    await featurePage.goto();
-    await featurePage.verifyLoaded();
-`;
+  return `[${id}-${layer}] ${title} [Scenario-${String(
+    scenarioIndex + 1
+  ).padStart(2, '0')}]`;
 }
 
 /**
@@ -737,15 +724,18 @@ function scenarioTestTemplate({
   issueKey,
   testCase,
   pageClass,
-  dataImport,
-  scenarioIndex,
+  scenarioIndex = 0,
   requiresPIMNavigation
 }) {
 
   /**
-   * Never generate a scenario for a disallowed layer.
+   * Never generate a scenario
+   * for a disallowed layer.
    */
-  if (!isAllowedTestLayer(testCase)) {
+
+  if (
+    !isAllowedTestLayer(testCase)
+  ) {
     return '';
   }
 
@@ -785,9 +775,7 @@ function scenarioTestTemplate({
 
   return `
   test(
-    '[${escapeString(testCase.id)}][${escapeString(
-      testCase.layer
-    )}] ${escapeString(testCase.title)}',
+    '${escapeString(title)}',
     async ({ page }) => {
 
       const featurePage =
@@ -800,7 +788,8 @@ function scenarioTestTemplate({
           : ''
       }
 
-      // Jira: ${escapeTemplateComment(issueKey)}
+      // Jira:
+      // ${escapeTemplateComment(issueKey)}
 
       // Jira scenario:
 ${stepComments}
@@ -808,7 +797,8 @@ ${stepComments}
 ${actions}
 
       // Expected result:
-      // ${escapeString(testCase.expected || 'Expected behavior is satisfied.')}
+      // ${escapeTemplateComment(expected)}
+
     }
   );
 `;
@@ -821,14 +811,13 @@ ${actions}
  *
  * Only Functional and Validation test cases are generated.
  *
- * Security, Performance and Compatibility are explicitly
- * excluded.
+ * Security, Performance and Compatibility are excluded.
  */
 
 function specTemplate({
   issueKey,
   summary,
-  testCases,
+  pageImport,
   pageClass,
   dataImport,
   testCases = [],
@@ -841,8 +830,13 @@ function specTemplate({
    * DEFENSIVE TEST CASE FILTER
    * ----------------------------------------------------------
    *
-   * This prevents stale or incorrectly classified Jira
-   * analysis from generating unwanted tests.
+   * Even if Jira analysis returns:
+   *
+   *   Security
+   *   Performance
+   *   Compatibility
+   *
+   * they are removed here before any tests are generated.
    */
 
   const filteredTestCases =
@@ -862,8 +856,8 @@ function specTemplate({
         testCase?.layer
       ) || 'Functional';
 
-    if (!groups[layer]) {
-      groups[layer] = [];
+    if (!grouped[layer]) {
+      grouped[layer] = [];
     }
 
     grouped[layer].push(
@@ -876,17 +870,10 @@ function specTemplate({
     'Validation'
   ];
 
-  const orderedLayers = [
-    ...preferredLayerOrder.filter(
+  const orderedLayers =
+    preferredLayerOrder.filter(
       layer => grouped[layer]
-    ),
-    ...Object.keys(grouped).filter(
-      layer =>
-        !preferredLayerOrder.includes(
-          layer
-        )
-    )
-  ];
+    );
 
   const sections =
     orderedLayers
@@ -903,7 +890,6 @@ function specTemplate({
                   issueKey,
                   testCase,
                   pageClass,
-                  dataImport,
                   scenarioIndex: index,
                   requiresPIMNavigation
                 })
@@ -925,6 +911,7 @@ ${tests}
     }
   );
 `;
+
       })
       .filter(Boolean)
       .join('\n');
@@ -933,10 +920,11 @@ ${tests}
     [
       ...new Set(
         filteredTestCases
-          .map(testCase =>
-            normalizeLayer(
-              testCase?.layer
-            )
+          .map(
+            testCase =>
+              normalizeLayer(
+                testCase?.layer
+              )
           )
           .filter(Boolean)
       )
@@ -945,11 +933,12 @@ ${tests}
   const layerComment =
     filteredLayers.length
       ? filteredLayers
-          .map(layer =>
-            escapeTemplateComment(layer)
+          .map(
+            layer =>
+              escapeTemplateComment(layer)
           )
           .join(', ')
-      : 'Functional';
+      : 'Functional, Validation';
 
   const pimImport =
     requiresPIMNavigation
@@ -975,17 +964,20 @@ const testData =
 ${pimImport}
 
 /**
- * Jira: ${issueKey}
- * Summary: ${escapeString(summary)}
+ * Jira:
+ *   ${escapeTemplateComment(issueKey)}
  *
- * STLC layers:
- * ${Object.keys(groups).join(', ')}
+ * Summary:
+ *   ${escapeTemplateComment(summary)}
  *
- * Allowed generated layers:
+ * STLC layers from Jira analysis:
+ *   ${escapeTemplateComment(layerComment)}
+ *
+ * Generated layers:
  *   Functional
  *   Validation
  *
- * Excluded generated layers:
+ * Explicitly excluded:
  *   Security
  *   Performance
  *   Compatibility
@@ -1001,8 +993,6 @@ ${pimImport}
  *
  * Test data:
  *   ${escapeTemplateComment(dataImport)}
- *
- * Only the current allowed Jira scenarios are generated.
  */
 
 test.describe(
@@ -1021,10 +1011,8 @@ ${sections}
  * SHARED LOGIN PAGE
  * ------------------------------------------------------------
  *
- * This remains available for explicit shared-login Jira
- * functionality.
- *
- * Normal feature Jira generation does NOT generate this page.
+ * This remains available only for an explicitly identified
+ * reusable-login Jira requirement.
  */
 
 function sharedLoginPageTemplate() {
@@ -1034,30 +1022,31 @@ function sharedLoginPageTemplate() {
 /**
  * Shared Login Page Object.
  *
- * Login is intentionally maintained under tests/shared
- * because authentication is a reusable application component.
+ * This component is reusable across Jira automation.
  */
-
 class LoginPage {
 
   constructor(page) {
 
     this.page = page;
 
-    this.usernameInput = page.getByLabel(
-      /email|username/i
-    );
+    this.usernameInput =
+      page.getByLabel(
+        /email|username/i
+      );
 
-    this.passwordInput = page.getByLabel(
-      /password/i
-    );
+    this.passwordInput =
+      page.getByLabel(
+        /password/i
+      );
 
-    this.loginButton = page.getByRole(
-      'button',
-      {
-        name: /log in|login|sign in/i
-      }
-    );
+    this.loginButton =
+      page.getByRole(
+        'button',
+        {
+          name: /login|log in|sign in/i
+        }
+      );
   }
 
   async goto() {
@@ -1107,12 +1096,20 @@ class LoginPage {
   ) {
 
     await expect(
-      this.page.getByText(message)
+      this.page.getByText(
+        message,
+        {
+          exact: false
+        }
+      )
     ).toBeVisible();
   }
+
 }
 
-module.exports = { LoginPage };
+module.exports = {
+  LoginPage
+};
 `;
 }
 
@@ -1122,8 +1119,6 @@ module.exports = { LoginPage };
  * ------------------------------------------------------------
  *
  * Kept only for explicit reusable-login Jira functionality.
- *
- * Normal feature Jira generation does NOT call this.
  */
 
 function sharedLoginSpecTemplate(
@@ -1181,9 +1176,7 @@ function sharedLoginSpecTemplate(
 
                   return `
     test(
-      '[${escapeString(testCase.id)}][${escapeString(
-        testCase.layer
-      )}] ${escapeString(testCase.title)}',
+      '${escapeString(title)}',
       async ({ page }) => {
 
         const loginPage =
@@ -1191,22 +1184,33 @@ function sharedLoginSpecTemplate(
 
         await loginPage.goto();
 
-        // Authentication credentials must come from environment variables.
-        const username = process.env.JIRA_TEST_USERNAME;
-        const password = process.env.JIRA_TEST_PASSWORD;
+        const username =
+          process.env.JIRA_TEST_USERNAME ||
+          process.env.TEST_USER_EMAIL ||
+          process.env.ADMIN_USERNAME;
+
+        const password =
+          process.env.JIRA_TEST_PASSWORD ||
+          process.env.TEST_USER_PASSWORD ||
+          process.env.ADMIN_PASSWORD;
 
         if (!username || !password) {
 
           throw new Error(
-            'JIRA_TEST_USERNAME and JIRA_TEST_PASSWORD must be configured.'
+            'JIRA_TEST_USERNAME/JIRA_TEST_PASSWORD or TEST_USER_EMAIL/TEST_USER_PASSWORD or ADMIN_USERNAME/ADMIN_PASSWORD must be configured.'
           );
         }
 
-        await loginPage.login(username, password);
+        await loginPage.login(
+          username,
+          password
+        );
+
         await loginPage.expectLoggedIn();
 
-        // Expected:
-        // ${escapeString(testCase.expected || 'User is successfully authenticated.')}
+        // Expected result:
+        // ${escapeTemplateComment(expected)}
+
       }
     );
 `;
@@ -1224,16 +1228,21 @@ ${tests}
     }
   );
 `;
+
         }
       )
       .join('\n');
 
-  return `const { test } = require('@playwright/test');
+  return `const {
+  test
+} = require('@playwright/test');
 
-const { LoginPage } = require('../pages/LoginPage');
+const {
+  LoginPage
+} = require('../pages/LoginPage');
 
 /**
- * Shared Login Coverage
+ * Shared login coverage.
  *
  * Jira:
  *   ${escapeTemplateComment(issueKey)}
@@ -1257,11 +1266,8 @@ ${sections}
  * DATA TEMPLATE
  * ------------------------------------------------------------
  *
- * IMPORTANT:
- *
- * Business test data belongs in the generated Jira data file.
- *
- * Employee search uses Employee Id 0400.
+ * Employee Id 0400 is the functional test value used by
+ * the PIM Employee List search.
  */
 
 function dataTemplate({
@@ -1278,10 +1284,9 @@ function dataTemplate({
  * Summary:
  *   ${escapeTemplateComment(summary)}
  *
- * Feature-specific business test data belongs in this file.
+ * Business test data belongs in this generated Jira data file.
  *
- * Employee names, Employee Ids and other functional test
- * values should NOT be stored in .env.
+ * Do not move employee business values into .env.
  */
 
 module.exports = {
@@ -1299,8 +1304,7 @@ module.exports = {
     '0400',
 
   /**
-   * Kept for backward compatibility with existing
-   * generated feature templates.
+   * Backward-compatible employee name.
    */
   employeeName:
     'Admin',
@@ -1310,6 +1314,7 @@ module.exports = {
 
   validationMessage:
     ''
+
 };
 `;
 }
@@ -1336,10 +1341,6 @@ module.exports = {
 
   sharedLoginSpecTemplate,
 
-  /**
-   * These are intentionally null here if they are supplied
-   * from another generation module.
-   */
   authenticatedFixtureTemplate:
     null,
 
