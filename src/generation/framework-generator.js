@@ -1,5 +1,3 @@
-'use strict';
-
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -14,6 +12,18 @@ const {
   filterAllowedTestCases,
   normalizeLayer
 } = require('./templates');
+
+/**
+ * Only these STLC layers are allowed to generate
+ * Playwright tests for a normal Jira feature.
+ *
+ * Security, Performance and Compatibility are intentionally
+ * excluded.
+ */
+const ALLOWED_TEST_LAYERS = new Set([
+  'functional',
+  'validation'
+]);
 
 class FrameworkGenerator {
 
@@ -34,19 +44,22 @@ class FrameworkGenerator {
     analysis = {},
     locatorConfig = {}
   ) {
+
     if (!issue?.key) {
+
       throw new Error(
         'Jira issue key is required. No files will be generated without a Jira key.'
       );
     }
 
     /**
-     * Login is reusable.
+     * Login is a reusable component.
      *
-     * Only an explicitly identified reusable login Jira
-     * requirement can generate the shared LoginPage.
+     * Only an explicitly identified reusable-login Jira
+     * requirement is allowed to generate the shared login
+     * component.
      *
-     * Normal feature Jira tickets MUST NOT generate:
+     * Normal feature Jira tickets MUST NOT create:
      *
      * tests/jira/<KEY>/pages/LoginPage.js
      * tests/jira/<KEY>/specs/login.spec.js
@@ -59,9 +72,11 @@ class FrameworkGenerator {
         analysis
       )
     ) {
+
       return this.generateSharedLogin(
         issue,
-        analysis
+        analysis,
+        locatorConfig
       );
     }
 
@@ -74,15 +89,82 @@ class FrameworkGenerator {
 
   /**
    * ----------------------------------------------------------
+   * FILTER TEST CASES
+   * ----------------------------------------------------------
+   *
+   * This is the first defensive layer.
+   *
+   * Even if the Jira analysis contains:
+   *
+   *   Security
+   *   Performance
+   *   Compatibility
+   *
+   * they are removed before any files are generated.
+   */
+
+  filterTestCases(
+    testCases
+  ) {
+
+    const filtered =
+      filterAllowedTestCases(
+        testCases
+      );
+
+    return filtered.filter(
+      testCase => {
+
+        const layer =
+          String(
+            testCase?.layer ||
+            'Functional'
+          )
+            .trim()
+            .toLowerCase();
+
+        return ALLOWED_TEST_LAYERS.has(
+          layer
+        );
+      }
+    );
+  }
+
+  /**
+   * ----------------------------------------------------------
+   * NORMALIZE LAYERS
+   * ----------------------------------------------------------
+   */
+
+  normalizeLayers(
+    testCases
+  ) {
+
+    return [
+      ...new Set(
+        testCases
+          .map(testCase =>
+            normalizeLayer(
+              testCase?.layer
+            )
+          )
+          .filter(Boolean)
+      )
+    ];
+  }
+
+  /**
+   * ----------------------------------------------------------
    * FEATURE GENERATION
    * ----------------------------------------------------------
    */
 
   generateFeature(
     issue,
-    analysis = {},
+    analysis,
     locatorConfig = {}
   ) {
+
     const ticketDir =
       path.join(
         this.rootDir,
@@ -91,31 +173,30 @@ class FrameworkGenerator {
         issue.key
       );
 
-    const pagesDir =
-      path.join(
-        ticketDir,
-        'pages'
-      );
+    const pagesDir = path.join(
+      ticketDir,
+      'pages'
+    );
 
-    const specsDir =
-      path.join(
-        ticketDir,
-        'specs'
-      );
+    const specsDir = path.join(
+      ticketDir,
+      'specs'
+    );
 
-    const dataDir =
-      path.join(
-        ticketDir,
-        'data'
-      );
+    const dataDir = path.join(
+      ticketDir,
+      'data'
+    );
 
     for (
-      const dir of [
+      const dir
+      of [
         pagesDir,
         specsDir,
         dataDir
       ]
     ) {
+
       fs.mkdirSync(
         dir,
         {
@@ -127,17 +208,15 @@ class FrameworkGenerator {
     const className =
       `${pascalCase(issue.summary)}Page`;
 
-    const pageFile =
-      path.join(
-        pagesDir,
-        `${className}.js`
-      );
+    const pageFile = path.join(
+      pagesDir,
+      `${className}.js`
+    );
 
-    const specFile =
-      path.join(
-        specsDir,
-        `${issue.key}.spec.js`
-      );
+    const specFile = path.join(
+      specsDir,
+      `${issue.key}.spec.js`
+    );
 
     const dataFile =
       path.join(
@@ -147,17 +226,10 @@ class FrameworkGenerator {
 
     /**
      * --------------------------------------------------------
-     * DEFENSIVE TEST CASE FILTERING
+     * DEFENSIVE TEST CASE FILTER
      * --------------------------------------------------------
      *
-     * Jira analysis may still contain:
-     *
-     * Security
-     * Performance
-     * Compatibility
-     *
-     * Those cases are discarded here before they reach
-     * the templates.
+     * Only Functional and Validation are allowed.
      */
 
     const rawTestCases =
@@ -168,32 +240,26 @@ class FrameworkGenerator {
         : [];
 
     const testCases =
-      filterAllowedTestCases(
+      this.filterTestCases(
         rawTestCases
       );
 
     /**
-     * Layers are derived from the filtered test cases.
+     * Layers are calculated ONLY from the filtered test cases.
      *
-     * We deliberately do NOT trust analysis.layers because
-     * that array may contain Security/Performance/Compatibility.
+     * This prevents stale Security/Performance/Compatibility
+     * values from appearing in generated metadata.
      */
 
-    const layers = [
-      ...new Set(
+    const layers =
+      this.normalizeLayers(
         testCases
-          .map(
-            testCase =>
-              normalizeLayer(
-                testCase?.layer
-              )
-          )
-          .filter(Boolean)
-      )
-    ];
+      );
 
     /**
-     * Shared PIM navigation.
+     * --------------------------------------------------------
+     * PIM NAVIGATION DETECTION
+     * --------------------------------------------------------
      */
 
     const requiresPIMNavigation =
@@ -208,16 +274,15 @@ class FrameworkGenerator {
     /**
      * --------------------------------------------------------
      * PAGE OBJECT
-     * --------------------------------------------------------
+     * ---------------------------------------------------------
      */
 
-    const pageSource =
-      pageObjectTemplate(
-        className,
-        issue.key,
-        issue.summary,
-        locatorConfig
-      );
+    const pageSource = pageObjectTemplate(
+      className,
+      issue.key,
+      issue.summary,
+      locatorConfig
+    );
 
     fs.writeFileSync(
       pageFile,
@@ -225,10 +290,13 @@ class FrameworkGenerator {
       'utf8'
     );
 
-    /**
-     * --------------------------------------------------------
-     * FEATURE SPEC
-     * --------------------------------------------------------
+    // Fail immediately if generated Page Object is invalid.
+    this.validateJavaScript(pageFile);
+
+    /*
+     * ---------------------------------------------------------
+     * SPECIFICATION
+     * ---------------------------------------------------------
      */
 
     const specSource =
@@ -261,28 +329,30 @@ class FrameworkGenerator {
       'utf8'
     );
 
-    /**
-     * --------------------------------------------------------
-     * DATA
-     * --------------------------------------------------------
+    // Fail immediately if generated spec is invalid.
+    this.validateJavaScript(specFile);
+
+    /*
+     * ---------------------------------------------------------
+     * TEST DATA
+     * ---------------------------------------------------------
      */
 
     fs.writeFileSync(
       dataFile,
       dataTemplate({
-        issueKey:
-          issue.key,
-
-        summary:
-          issue.summary
+        issueKey: issue.key,
+        summary: issue.summary
       }),
       'utf8'
     );
 
-    /**
-     * --------------------------------------------------------
+    this.validateJavaScript(dataFile);
+
+    /*
+     * ---------------------------------------------------------
      * METADATA
-     * --------------------------------------------------------
+     * ---------------------------------------------------------
      */
 
     this.writeMetadata(
@@ -290,63 +360,46 @@ class FrameworkGenerator {
       issue,
       {
         ...analysis,
+
+        /**
+         * IMPORTANT:
+         *
+         * Store ONLY the filtered test cases/layers.
+         */
         testCases,
+
         layers,
+
         requiresPIMNavigation
       }
     );
 
-    /**
-     * --------------------------------------------------------
-     * JAVASCRIPT VALIDATION
-     * --------------------------------------------------------
-     *
-     * This must happen after all generated files exist.
-     */
-
-    this.validateJavaScript(
-      pageFile
-    );
-
-    this.validateJavaScript(
-      specFile
-    );
-
-    this.validateJavaScript(
-      dataFile
-    );
-
     return {
-      type:
-        'jira-feature',
-
+      type: 'jira-feature',
       ticketDir,
-
       pageFile,
-
       specFile,
-
-      dataFile,
-
       layers,
-
       testCases:
         testCases.length,
+
+      /**
+       * Return the actual generated test cases so the
+       * caller can verify that unwanted layers were removed.
+       */
+      generatedTestCases:
+        testCases,
 
       requiresPIMNavigation
     };
   }
 
-  /**
-   * ----------------------------------------------------------
-   * SHARED LOGIN GENERATION
-   * ----------------------------------------------------------
-   */
-
   generateSharedLogin(
     issue,
-    analysis = {}
+    analysis,
+    locatorConfig = {}
   ) {
+
     const sharedPagesDir =
       path.join(
         this.rootDir,
@@ -355,66 +408,55 @@ class FrameworkGenerator {
         'pages'
       );
 
-    const sharedTestsDir =
-      path.join(
-        this.rootDir,
-        'tests',
-        'shared',
-        'tests'
-      );
+    const sharedSpecsDir = path.join(
+      this.rootDir,
+      'tests',
+      'shared',
+      'tests'
+    );
 
     fs.mkdirSync(
       sharedPagesDir,
-      {
-        recursive: true
-      }
+      { recursive: true }
     );
 
     fs.mkdirSync(
-      sharedTestsDir,
-      {
-        recursive: true
-      }
+      sharedSpecsDir,
+      { recursive: true }
     );
 
-    const pageFile =
-      path.join(
-        sharedPagesDir,
-        'LoginPage.js'
-      );
+    const pageFile = path.join(
+      sharedPagesDir,
+      'LoginPage.js'
+    );
 
-    const specFile =
-      path.join(
-        sharedTestsDir,
-        'login.spec.js'
-      );
+    const specFile = path.join(
+      sharedSpecsDir,
+      'login.spec.js'
+    );
+
+    const rawTestCases =
+      Array.isArray(
+        analysis?.testCases
+      )
+        ? analysis.testCases
+        : [];
 
     const testCases =
-      filterAllowedTestCases(
-        Array.isArray(
-          analysis?.testCases
-        )
-          ? analysis.testCases
-          : []
+      this.filterTestCases(
+        rawTestCases
       );
-
-    const layers = [
-      ...new Set(
-        testCases
-          .map(
-            testCase =>
-              normalizeLayer(
-                testCase?.layer
-              )
-          )
-          .filter(Boolean)
-      )
-    ];
 
     fs.writeFileSync(
       pageFile,
-      sharedLoginPageTemplate(),
+      sharedLoginPageTemplate(
+        locatorConfig
+      ),
       'utf8'
+    );
+
+    this.validateJavaScript(
+      pageFile
     );
 
     fs.writeFileSync(
@@ -427,14 +469,10 @@ class FrameworkGenerator {
     );
 
     this.validateJavaScript(
-      pageFile
-    );
-
-    this.validateJavaScript(
       specFile
     );
 
-    const metadataFile =
+    const sharedMetadata =
       path.join(
         this.rootDir,
         'tests',
@@ -442,13 +480,13 @@ class FrameworkGenerator {
         'LOGIN-COVERAGE.md'
       );
 
-    const coverageLines =
-      testCases.map(
-        testCase =>
-          `- [${testCase?.id || 'TC'}][${testCase?.layer || 'Functional'}] ${testCase?.title || 'Generated login test'}`
+    const layers =
+      this.normalizeLayers(
+        testCases
       );
 
-    const metadata =
+    fs.writeFileSync(
+      sharedMetadata,
       [
         '# Shared Login Coverage',
         '',
@@ -456,52 +494,24 @@ class FrameworkGenerator {
         '',
         `Layers: ${layers.join(', ') || 'Functional'}`,
         '',
-        'Allowed layers:',
-        '- Functional',
-        '- Validation',
-        '',
-        'Excluded layers:',
-        '- Security',
-        '- Performance',
-        '- Compatibility',
-        '',
         `Generated test cases: ${testCases.length}`,
         '',
-        ...coverageLines,
+        ...testCases.map(
+          tc =>
+            `- [${tc.id}][${tc.layer}] ${tc.title} — ${tc.source || 'Jira'}`
+        ),
         ''
-      ].join('\n');
-
-    fs.writeFileSync(
-      metadataFile,
-      metadata,
+      ].join('\n'),
       'utf8'
     );
 
-    this.validateJavaScript(
-      pageFile
-    );
-
-    this.validateJavaScript(
-      specFile
-    );
-
     return {
-      type:
-        'shared-component',
-
-      ticketDir:
-        null,
-
+      type: 'shared-component',
+      ticketDir: null,
       pageFile,
-
       specFile,
-
-      metadataFile,
-
-      layers,
-
-      testCases:
-        testCases.length
+      layers: analysis.layers || [],
+      testCases: testCases.length
     };
   }
 
@@ -515,10 +525,10 @@ class FrameworkGenerator {
     issue,
     analysis = {}
   ) {
+
     const text =
       [
         issue?.summary,
-        issue?.description,
         analysis?.summary,
         analysis?.feature,
         analysis?.component,
@@ -531,6 +541,7 @@ class FrameworkGenerator {
                 testCase?.title,
                 testCase?.expected,
                 testCase?.expectedResult,
+
                 ...(Array.isArray(
                   testCase?.steps
                 )
@@ -563,10 +574,10 @@ class FrameworkGenerator {
     issue,
     analysis = {}
   ) {
+
     const text =
       [
         issue?.summary,
-        issue?.description,
         analysis?.summary,
         analysis?.feature,
         analysis?.component,
@@ -579,6 +590,7 @@ class FrameworkGenerator {
                 testCase?.title,
                 testCase?.expected,
                 testCase?.expectedResult,
+
                 ...(Array.isArray(
                   testCase?.steps
                 )
@@ -613,6 +625,7 @@ class FrameworkGenerator {
     issue,
     analysis = {}
   ) {
+
     const metadataFile =
       path.join(
         ticketDir,
@@ -620,14 +633,13 @@ class FrameworkGenerator {
       );
 
     /**
-     * Defensive filtering again.
-     *
-     * README must never report excluded layers as
-     * generated automation.
+     * Defensive filtering is repeated here so README
+     * metadata cannot report Security/Performance/
+     * Compatibility as generated coverage.
      */
 
     const testCases =
-      filterAllowedTestCases(
+      this.filterTestCases(
         Array.isArray(
           analysis?.testCases
         )
@@ -635,27 +647,20 @@ class FrameworkGenerator {
           : []
       );
 
-    const layers = [
-      ...new Set(
+    const layers =
+      this.normalizeLayers(
         testCases
-          .map(
-            testCase =>
-              normalizeLayer(
-                testCase?.layer
-              )
-          )
-          .filter(Boolean)
-      )
-    ];
+      );
 
     const requirements =
-      Array.isArray(
-        analysis?.requirementGaps
-      )
-        ? analysis.requirementGaps
-        : [];
+      Array.isArray(analysis?.gaps)
+        ? analysis.gaps
+        : Array.isArray(analysis?.requirementGaps)
+          ? analysis.requirementGaps
+          : [];
 
     const lines = [
+
       `# ${issue.key} - ${issue.summary || ''}`,
 
       '',
@@ -672,7 +677,7 @@ class FrameworkGenerator {
 
       '',
 
-      '## Generated STLC Layers',
+      '## STLC Layers',
 
       '',
 
@@ -733,18 +738,6 @@ class FrameworkGenerator {
 
       '',
 
-      '## PIM Search Data',
-
-      '',
-
-      'Employee Id used by generated PIM search:',
-
-      '',
-
-      '`0400`',
-
-      '',
-
       '## Test Cases',
 
       ''
@@ -755,6 +748,7 @@ class FrameworkGenerator {
       index < testCases.length;
       index += 1
     ) {
+
       const testCase =
         testCases[index];
 
@@ -766,6 +760,7 @@ class FrameworkGenerator {
         testCase?.expected ||
         testCase?.expectedResult
       ) {
+
         lines.push(
           `   - Expected: ${testCase.expectedResult || testCase.expected}`
         );
@@ -774,38 +769,50 @@ class FrameworkGenerator {
 
     lines.push(
       '',
+
       '## Requirement Gaps',
+
       ''
     );
 
-    if (
-      requirements.length
-    ) {
+    if (requirements.length) {
+
       lines.push(
         ...requirements.map(
           gap =>
             `- ${gap}`
         )
       );
+
     } else {
+
       lines.push(
         '- None identified.'
       );
     }
 
     lines.push(
+
       '',
+
       '## Generated Automation',
+
       '',
+
       'The generated automation uses executable Playwright assertions.',
+
       '',
+
       'Only Functional and Validation Jira scenarios are generated.',
+
       '',
+
       'Security, Performance and Compatibility scenarios are intentionally excluded.',
+
       '',
-      'Employee search uses Employee Id 0400.',
-      '',
+
       'The generated feature test does not duplicate login functionality.',
+
       ''
     );
 
@@ -822,54 +829,35 @@ class FrameworkGenerator {
    * ----------------------------------------------------------
    * JAVASCRIPT VALIDATION
    * ----------------------------------------------------------
-   *
-   * FIX:
-   *
-   * The previous implementation attempted to reference
-   * `result` before it had been initialized.
-   *
-   * The spawnSync call MUST happen first.
    */
 
   validateJavaScript(
     filePath
   ) {
-    if (
-      !fs.existsSync(filePath)
-    ) {
+
+    if (!fs.existsSync(filePath)) {
       throw new Error(
         `Cannot validate missing JavaScript file: ${filePath}`
       );
     }
 
-    const result =
-      spawnSync(
-        process.execPath,
-        [
-          '--check',
-          filePath
-        ],
-        {
-          encoding: 'utf8'
-        }
-      );
+    const result = spawnSync(
+      process.execPath,
+      ['--check', filePath],
+      {
+        encoding: 'utf8',
+        stdio: 'pipe'
+      }
+    );
 
-    if (
-      result.error
-    ) {
-      throw new Error(
-        [
-          'Unable to execute Node.js syntax validation.',
-          `File: ${filePath}`,
-          '',
-          result.error.message
-        ].join('\n')
-      );
+    if (result.error) {
+      throw result.error;
     }
 
     if (
       result.status !== 0
     ) {
+
       const output =
         [
           result.stdout,
@@ -887,9 +875,8 @@ class FrameworkGenerator {
         ].join('\n')
       );
     }
-
-    return true;
   }
+
 }
 
 module.exports = {
