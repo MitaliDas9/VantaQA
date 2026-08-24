@@ -2,31 +2,23 @@ name: Auto Create and Merge PR
 
 on:
   push:
-    branches:
-      - '**'          # Matches every branch
-      - '!main'        # Excludes main branch
-
-permissions:
-  contents: write
-  pull-requests: write
+    branches: [ main ]
 
 jobs:
-  automerge:
+  make-pull-request:         # 1. Your job name
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
+    permissions:             # 2. ADD THIS BLOCK HERE (indented under the job name)
+      contents: write
+      pull-requests: write
+
+    steps:                   # 3. Your existing steps follow below
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create PR and Auto-Merge
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # 1. Create the Pull Request (if one does not exist yet)
-          gh pr create \
-            --base main \
-            --head ${{ github.ref_name }} \
-            --title "Auto-PR: ${{ github.event.head_commit.message }}" \
-            --body "Automated PR created by GitHub Actions pipeline." || true
-
-          # 2. Set the PR to Auto-Merge
-          gh pr merge ${{ github.ref_name }} --auto --merge
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: auto-generated-branch
+          title: "Automated PR"
+          body: "Auto-generated pull request for hackathon project."
