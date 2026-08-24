@@ -44,14 +44,14 @@ Reusable PIM navigation is supplied by:
    - Expected: Display Employee Records
 4. [AC-02-VALIDATION][Validation] Verify display Employee Records (Validation)
    - Expected: Display Employee Records
-5. [FUNC-002][Functional] Verify employee search using Employee Id 0400
-   - Expected: The Employee List displays the employee record matching Employee Id 0400.
-6. [VAL-001][Validation] Verify employee search validation for an invalid Employee Id
-   - Expected: No employee record is displayed for the invalid Employee Id.
+5. [VAL-001][Validation] Verify negative and boundary validation for  Manage and Search Employees from PIM Employee List
+   - Expected: The application rejects invalid input with the correct validation and does not perform the invalid operation.
 
 ## Requirement Gaps
 
 - Negative/boundary scenarios are not explicit.
+- Compatibility/browser coverage is not explicit.
+- Performance/response-time coverage is not explicit.
 
 ## Generated Automation
 
