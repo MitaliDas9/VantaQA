@@ -1,110 +1,177 @@
-name: VantaQA Playwright CI
-
-on:
-  push:
-    branches: [main, master, develop]
-  pull_request:
-    branches: [main, master, develop]
-  workflow_dispatch:
-    inputs:
-      jira_key:
-        description: "Jira key to generate, e.g. SCRUM-123"
-        required: true
-        type: string
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    env:
-      JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
-      JIRA_TEST_SUBTASK_ISSUE_TYPE: ${{ secrets.JIRA_TEST_SUBTASK_ISSUE_TYPE }}
-      BASE_URL: ${{ secrets.BASE_URL }}
-      TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
-      TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-      GMAIL_USER: ${{ secrets.GMAIL_USER }}
-      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-      REPORT_EMAIL_TO: ${{ secrets.REPORT_EMAIL_TO }}
-      REPORT_EMAIL_FROM: ${{ secrets.REPORT_EMAIL_FROM }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright
-        run: npx playwright install --with-deps chromium
-
-      - name: Generate from Jira (manual dispatch)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.jira_key != '' }}
+name: VantaQA Playwright CI 
+ 
+on: 
+  push: 
+    branches: [main, master, develop] 
+ 
+  pull_request: 
+    branches: [main, master, develop] 
+    types: [opened, synchronize, reopened] 
+ 
+  workflow_dispatch: 
+    inputs: 
+      jira_key: 
+        description: "Jira key to generate, e.g. SCRUM-123" 
+        required: true 
+        type: string 
+ 
+permissions: 
+  contents: write 
+  pull-requests: write 
+ 
+jobs: 
+  test: 
+    runs-on: ubuntu-latest 
+ 
+    env: 
+      JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }} 
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }} 
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }} 
+      JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }} 
+      JIRA_TEST_SUBTASK_ISSUE_TYPE: ${{ secrets.JIRA_TEST_SUBTASK_ISSUE_TYPE }} 
+      BASE_URL: ${{ secrets.BASE_URL }} 
+      TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }} 
+      TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }} 
+      GMAIL_USER: ${{ secrets.GMAIL_USER }} 
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }} 
+      REPORT_EMAIL_TO: ${{ secrets.REPORT_EMAIL_TO }} 
+      REPORT_EMAIL_FROM: ${{ secrets.REPORT_EMAIL_FROM }} 
+ 
+    steps: 
+ 
+      - name: Checkout 
+        uses: actions/checkout@v4 
+ 
+      - name: Setup Node 
+        uses: actions/setup-node@v4 
+        with: 
+          node-version: 20 
+          cache: npm 
+ 
+      - name: Install dependencies 
+        run: npm ci 
+ 
+      - name: Install Playwright 
+        run: npx playwright install --with-deps chromium 
+ 
+      # --------------------------------------------------------- 
+      # GENERATE ONLY WHEN MANUALLY DISPATCHED 
+      # --------------------------------------------------------- 
+      - name: Generate from Jira 
+        if: github.event_name == 'workflow_dispatch' 
+        env: 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_OWNER: ${{ github.repository_owner }} 
+          GITHUB_REPO: ${{ github.event.repository.name }} 
+        run: | 
+          npm run jira:generate -- "${{ inputs.jira_key }}" 
+ 
+      # --------------------------------------------------------- 
+      # RUN PLAYWRIGHT 
+      # --------------------------------------------------------- 
+      - name: Run Playwright 
+        id: playwright 
+        continue-on-error: true 
+        shell: bash 
+        run: | 
+          set +e 
+ 
+          npm test 
+ 
+          EXIT_CODE=$? 
+ 
+          echo "Playwright exit code: $EXIT_CODE" 
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT" 
+ 
+          exit $EXIT_CODE 
+ 
+      # --------------------------------------------------------- 
+      # DEFECT TRIAGE 
+      # --------------------------------------------------------- 
+      - name: Build defect triage package 
+        if: steps.playwright.outcome == 'failure' 
+        run: | 
+          node -e "require('./src/triage/defect-triage').createTriagePayload({ error: new Error('Playwright suite failed') })" 
+ 
+      # --------------------------------------------------------- 
+      # EMAIL REPORT 
+      # --------------------------------------------------------- 
+      - name: Send Gmail report 
+        if: always() 
+        run: npm run ci:report 
+ 
+      # --------------------------------------------------------- 
+      # UPLOAD PLAYWRIGHT REPORT 
+      # --------------------------------------------------------- 
+      - name: Upload Playwright report 
+        if: always() 
+        uses: actions/upload-artifact@v4 
+        with: 
+          name: playwright-report-${{ github.run_number }} 
+          path: playwright-report/ 
+ 
+      # --------------------------------------------------------- 
+      # UPLOAD TEST RESULTS 
+      # --------------------------------------------------------- 
+      - name: Upload test evidence 
+        if: always() 
+        uses: actions/upload-artifact@v4 
+        with: 
+          name: test-results-${{ github.run_number }} 
+          path: test-results/ 
+ 
+      # --------------------------------------------------------- 
+      # UPLOAD VANTAQA ARTIFACTS 
+      # --------------------------------------------------------- 
+      - name: Upload VantaQA artifacts 
+        if: always() 
+        uses: actions/upload-artifact@v4 
+        with: 
+          name: vantaqa-artifacts-${{ github.run_number }} 
+          path: artifacts/ 
+          if-no-files-found: ignore 
+ 
+            # ---------------------------------------------------------
+      # AUTO MERGE PR
+      # ONLY RUNS FOR PULL REQUEST WORKFLOW
+      # ---------------------------------------------------------
+      - name: Auto merge PR
+        if: |
+          github.event_name == 'pull_request' &&
+          steps.playwright.outputs.exit_code == '0'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_OWNER: ${{ github.repository_owner }}
-          GITHUB_REPO: ${{ github.event.repository.name }}
-        run: npm run jira:generate -- "${{ inputs.jira_key }}"
-
-      - name: Run Playwright
-        id: playwright
-        continue-on-error: true
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          set +e
-          npm test
-          EXIT_CODE=$?
+          echo "Playwright tests passed."
+          echo "PR #${{ github.event.pull_request.number }}"
+          echo "Source branch: ${{ github.head_ref }}"
+          echo "Target branch: ${{ github.base_ref }}"
 
-          echo "Playwright exit code: $EXIT_CODE"
-          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
-
-          exit $EXIT_CODE
-
-      - name: Build defect triage package
-        if: steps.playwright.outcome == 'failure'
-        run: |
-          node -e "require('./src/triage/defect-triage').createTriagePayload({ error: new Error('Playwright suite failed') })"
-
-      - name: Send Gmail report
-        if: always()
-        run: npm run ci:report
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-${{ github.run_number }}
-          path: playwright-report/
-
-      - name: Upload test evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ github.run_number }}
-          path: test-results/
-
-      - name: Upload VantaQA artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vantaqa-artifacts-${{ github.run_number }}
-          path: artifacts/
-          if-no-files-found: ignore
-
-      - name: Fail workflow when tests fail
-        if: always()
-        shell: bash
-        run: |
-          if [ "${{ steps.playwright.outputs.exit_code }}" != "0" ]; then
-            echo "Playwright tests failed with exit code ${{ steps.playwright.outputs.exit_code }}"
-            exit 1
+          if [[ "${{ github.head_ref }}" != EH-* ]]; then
+            echo "Branch does not match EH-* pattern."
+            echo "Skipping auto merge."
+            exit 0
           fi
 
-          echo "Playwright tests passed."
+          echo "Auto merging PR #${{ github.event.pull_request.number }}"
+
+          gh pr merge "${{ github.event.pull_request.number }}" \
+            --squash \
+            --delete-branch
+
+          echo "PR merged successfully."
+ 
+      # --------------------------------------------------------- 
+      # FAIL WORKFLOW IF TESTS FAILED 
+      # --------------------------------------------------------- 
+      - name: Fail workflow when tests fail 
+        if: always() 
+        shell: bash 
+        run: | 
+          if [ "${{ steps.playwright.outputs.exit_code }}" != "0" ]; then 
+            echo "Playwright tests failed with exit code ${{ steps.playwright.outputs.exit_code }}" 
+            exit 1 
+          fi 
+ 
+          echo "Playwright tests passed." this yaml
