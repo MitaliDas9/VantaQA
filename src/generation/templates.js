@@ -151,10 +151,14 @@ function pageObjectTemplate(
   };
 
   const employeeIdLocator =
-    locator(
-      'employeeIdInput',
-      "page.getByLabel('Employee Id', { exact: true })"
-    );
+  locator(
+    'employeeIdInput',
+    `page
+      .locator('.oxd-input-group')
+      .filter({ hasText: 'Employee Id' })
+      .locator('input')
+      .first()`
+  );
 
   const searchLocator =
     locator(
@@ -238,34 +242,69 @@ class ${className} {
   /**
    * Search the Employee List by Employee Id.
    */
-  async searchByEmployeeId(value) {
+async searchByEmployeeId(value) {
 
-    await this.employeeIdInput.fill(
-      value
-    );
+  await expect(
+    this.employeeIdInput,
+    'Employee Id input should be visible before searching.'
+  ).toBeVisible({
+    timeout: 30000
+  });
 
-    await this.searchButton.click();
-  }
+  await this.employeeIdInput.fill(
+    String(value)
+  );
+
+  await expect(
+    this.searchButton,
+    'Search button should be visible before searching.'
+  ).toBeVisible({
+    timeout: 30000
+  });
+
+  await this.searchButton.click();
+}
 
   /**
    * Search the Employee List by name.
    */
   async searchByName(value) {
 
-    await this.searchInput.fill(
-      value
-    );
+  await expect(
+    this.searchInput,
+    'Employee search input should be visible before searching.'
+  ).toBeVisible({
+    timeout: 30000
+  });
 
-    await this.searchButton.click();
-  }
+  await this.searchInput.fill(
+    String(value)
+  );
+
+  await expect(
+    this.searchButton,
+    'Search button should be visible before searching.'
+  ).toBeVisible({
+    timeout: 30000
+  });
+
+  await this.searchButton.click();
+}
 
   /**
    * Clear the current Employee List search criteria.
    */
   async resetSearch() {
 
-    await this.resetButton.click();
-  }
+  await expect(
+    this.resetButton,
+    'Reset button should be visible before clicking.'
+  ).toBeVisible({
+    timeout: 30000
+  });
+
+  await this.resetButton.click();
+}
 
   /**
    * Return the number of displayed employee records.
@@ -1031,23 +1070,20 @@ class LoginPage {
 
     this.page = page;
 
-    this.usernameInput =
-      page.getByLabel(
-        /email|username/i
-      );
+    this.usernameInput = page.locator(
+  'input[name="username"], input[name="txtUsername"], input[name="email"], input[placeholder*="User"], input[placeholder*="Email"], input[type="text"]'
+).first();
 
-    this.passwordInput =
-      page.getByLabel(
-        /password/i
-      );
+this.passwordInput = page.locator(
+  'input[name="password"], input[name="txtPassword"], input[type="password"]'
+).first();
 
-    this.loginButton =
-      page.getByRole(
-        'button',
-        {
-          name: /login|log in|sign in/i
-        }
-      );
+this.loginButton = page.getByRole(
+  'button',
+  {
+    name: /login|log in|sign in/i
+  }
+).first();
   }
 
   async goto() {
@@ -1062,10 +1098,44 @@ class LoginPage {
       );
     }
 
-    await this.page.goto(
-      baseUrl
+   async goto() {
+
+  const baseUrl =
+    process.env.BASE_URL;
+
+  if (!baseUrl) {
+
+    throw new Error(
+      'BASE_URL is required for LoginPage.goto().'
     );
   }
+
+  this.page.setDefaultNavigationTimeout(
+    60000
+  );
+
+  await this.page.goto(
+    baseUrl,
+    {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000
+    }
+  );
+
+  await expect(
+    this.usernameInput,
+    'Username input should appear after opening the login page.'
+  ).toBeVisible({
+    timeout: 30000
+  });
+
+  await expect(
+    this.passwordInput,
+    'Password input should appear after opening the login page.'
+  ).toBeVisible({
+    timeout: 30000
+  });
+}
 
   async login(
     username,
