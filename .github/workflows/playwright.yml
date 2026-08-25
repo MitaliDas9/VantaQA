@@ -55,8 +55,17 @@ jobs:
 
       - name: Run Playwright
         id: playwright
-        run: npm test
         continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          npm test
+          EXIT_CODE=$?
+
+          echo "Playwright exit code: $EXIT_CODE"
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+          exit $EXIT_CODE
 
       - name: Build defect triage package
         if: steps.playwright.outcome == 'failure'
@@ -90,5 +99,12 @@ jobs:
           if-no-files-found: ignore
 
       - name: Fail workflow when tests fail
-        if: steps.playwright.outcome == 'failure'
-        run: exit 1
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.playwright.outputs.exit_code }}" != "0" ]; then
+            echo "Playwright tests failed with exit code ${{ steps.playwright.outputs.exit_code }}"
+            exit 1
+          fi
+
+          echo "Playwright tests passed."
