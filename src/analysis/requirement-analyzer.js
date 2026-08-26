@@ -1,4 +1,10 @@
-const LAYERS = ['Functional', 'Validation', 'Compatibility', 'Security', 'Performance'];
+const LAYERS = [
+  'Functional',
+  'Validation',
+  'Compatibility',
+  'Security',
+  'Performance'
+];
 
 function unique(values) {
   return [...new Set(values)];
@@ -6,6 +12,7 @@ function unique(values) {
 
 function splitScenarios(text) {
   const normalized = (text || '').replace(/\r/g, '');
+
   const lines = normalized
     .split(/\n+/)
     .map(line => line.replace(/^[-*]\s*/, '').trim())
@@ -15,7 +22,9 @@ function splitScenarios(text) {
     /acceptance|given|when|then|should|must|verify|validate|user can|system|criteria/i.test(line)
   );
 
-  return candidates.length ? candidates : [text || 'Verify the Jira requirement'];
+  return candidates.length
+    ? candidates
+    : [text || 'Verify the Jira requirement'];
 }
 
 function extractAcceptanceCriteria(text) {
@@ -27,20 +36,44 @@ function extractAcceptanceCriteria(text) {
     .trim();
 
   const blocks = [];
-  const matcher = /(?:^|\s)(AC\s*\d+\s*[-:]?\s*.*?(?=\s+AC\s*\d+\s*[-:]?|$))/gi;
+
+  /*
+   * Supports:
+   *
+   * AC-01 Given ... When ... Then ...
+   * AC-02 Given ... When ... Then ...
+   *
+   * and:
+   *
+   * AC 01 - Given ...
+   */
+  const matcher =
+    /(?:^|\s)(AC\s*\d+\s*[-:]?\s*.*?(?=\s+AC\s*\d+\s*[-:]?|$))/gi;
+
   let match;
 
   while ((match = matcher.exec(normalized)) !== null) {
     const item = match[0].trim();
-    if (item && /Given|When|Then|should|must|can|verify|validate|user/i.test(item)) {
+
+    if (
+      item &&
+      /Given|When|Then|should|must|can|verify|validate|user/i.test(item)
+    ) {
       blocks.push(item);
     }
   }
 
   if (blocks.length) {
-    return blocks.map(block => block.replace(/^AC\s*\d+\s*[-:]?\s*/i, '').trim());
+    return blocks.map(block =>
+      block
+        .replace(/^AC\s*\d+\s*[-:]?\s*/i, '')
+        .trim()
+    );
   }
 
+  /*
+   * Fallback for line-based acceptance criteria.
+   */
   const lines = (text || '')
     .replace(/\r/g, '')
     .split(/\n+/)
@@ -48,160 +81,340 @@ function extractAcceptanceCriteria(text) {
     .filter(Boolean);
 
   const fallback = lines.filter(line =>
-    /(?:AC\s*\d+|Given|When|Then|must|should|verify|validate|user can)/i.test(line)
+    /(?:AC\s*\d+|Given|When|Then|must|should|verify|validate|user can)/i.test(
+      line
+    )
   );
 
-  return fallback.map(line => line.replace(/^AC\s*\d+\s*[-:]?\s*/i, '').trim());
+  return fallback.map(line =>
+    line
+      .replace(/^AC\s*\d+\s*[-:]?\s*/i, '')
+      .trim()
+  );
 }
 
+/**
+ * Determine the layer explicitly represented by an acceptance criterion.
+ *
+ * Important:
+ * "access Employee List" is NOT automatically Security.
+ *
+ * Security requires security-specific language such as:
+ * authorization, unauthorized, role, permission, credentials, etc.
+ */
 function detectLayerFromText(text) {
   const value = (text || '').toLowerCase();
 
-  if (/invalid|empty|required|boundary|negative|error|incorrect|missing|validate|validation/.test(value)) {
+  if (
+    /invalid|empty|required|boundary|negative|error|incorrect|missing|validation|validate/i.test(
+      value
+    )
+  ) {
     return 'Validation';
   }
-  if (/unauthori|permission|role|access|credential|password|session|authorization|security/.test(value)) {
+
+  if (
+    /unauthori|permission|role-based|role based|credential|password|session|authorization|security|secure|access denied|forbidden|csrf|xss|lockout|brute force/i.test(
+      value
+    )
+  ) {
     return 'Security';
   }
-  if (/response time|latency|throughput|load|performance|under .* second|seconds?/.test(value)) {
+
+  if (
+    /response time|latency|throughput|performance|under .* second|seconds?|concurrent|load time/i.test(
+      value
+    )
+  ) {
     return 'Performance';
   }
-  if (/browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/.test(value)) {
+
+  if (
+    /browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/i.test(
+      value
+    )
+  ) {
     return 'Compatibility';
   }
+
   return 'Functional';
 }
 
+/**
+ * Parse a single Jira Acceptance Criterion.
+ *
+ * The AC itself is authoritative.
+ * We do not manufacture Validation/Security/Performance behavior here.
+ */
 function parseAcceptanceCriterion(criterion, index) {
-  const text = (criterion || '').replace(/\s+/g, ' ').trim();
-  const acMatch = text.match(/^AC\s*\d+\s*[-–:]?\s*(.*)$/i);
-  const labelPart = acMatch ? acMatch[1].trim() : text;
+  const text = (criterion || '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  const titleMatch = labelPart.match(/^(.*?)(?=\s+(?:Given|When|Then)\b|$)/i);
-  const titleValue = (titleMatch ? titleMatch[1].trim() : labelPart).replace(/^[-–:\s]+/, '').trim();
-  const title = titleValue || `Verify ${criterion}`;
+  const acMatch = text.match(
+    /^AC\s*\d+\s*[-–:]?\s*(.*)$/i
+  );
 
-  const givenMatch = text.match(/Given\s+(.+?)(?=\s+When\b)/i);
-  const whenMatch = text.match(/When\s+(.+?)(?=\s+Then\b)/i);
-  const thenMatch = text.match(/Then\s+(.+?)(?=\s+(?:Given|When|Then|$))/i);
+  const labelPart = acMatch
+    ? acMatch[1].trim()
+    : text;
+
+  const titleMatch = labelPart.match(
+    /^(.*?)(?=\s+(?:Given|When|Then)\b|$)/i
+  );
+
+  const titleValue = (
+    titleMatch
+      ? titleMatch[1].trim()
+      : labelPart
+  )
+    .replace(/^[-–:\s]+/, '')
+    .trim();
+
+  const title =
+    titleValue ||
+    `Verify ${criterion}`;
+
+  const givenMatch = text.match(
+    /Given\s+(.+?)(?=\s+When\b)/i
+  );
+
+  const whenMatch = text.match(
+    /When\s+(.+?)(?=\s+Then\b)/i
+  );
+
+  const thenMatch = text.match(
+    /Then\s+(.+?)(?=\s+(?:Given|When|Then|$))/i
+  );
 
   const steps = [];
-  if (givenMatch) steps.push(`Given ${givenMatch[1].trim()}`);
-  if (whenMatch) steps.push(`When ${whenMatch[1].trim()}`);
-  if (thenMatch) steps.push(`Then ${thenMatch[1].trim()}`);
 
-  if (!steps.length) {
-    steps.push('Open the feature under test.');
-    steps.push(`Perform the requested behavior: "${title}".`);
-    steps.push('Validate the result matches the expected outcome.');
+  if (givenMatch) {
+    steps.push(
+      `Given ${givenMatch[1].trim()}`
+    );
   }
 
-  const expected = thenMatch ? thenMatch[1].trim() : title;
-  const layer = detectLayerFromText(text + ' ' + title + ' ' + expected);
+  if (whenMatch) {
+    steps.push(
+      `When ${whenMatch[1].trim()}`
+    );
+  }
+
+  if (thenMatch) {
+    steps.push(
+      `Then ${thenMatch[1].trim()}`
+    );
+  }
+
+  if (!steps.length) {
+    steps.push(
+      'Open the feature under test.'
+    );
+
+    steps.push(
+      `Perform the requested behavior: "${title}".`
+    );
+
+    steps.push(
+      'Validate the result matches the expected outcome.'
+    );
+  }
+
+  const expected = thenMatch
+    ? thenMatch[1].trim()
+    : title;
+
+  /*
+   * Determine the layer from the actual AC.
+   *
+   * Normal AC-01/02/03 -> Functional.
+   *
+   * If the AC explicitly says "invalid input", it becomes Validation.
+   * If the AC explicitly says "unauthorized user", it becomes Security.
+   */
+  const layer = detectLayerFromText(
+    text
+  );
 
   return {
     id: `AC-${String(index + 1).padStart(2, '0')}`,
     layer,
     source: 'Acceptance Criteria',
-    title: `Verify ${title.charAt(0).toLowerCase() + title.slice(1)}`,
+    title: `Verify ${title.charAt(0).toLowerCase()}${title.slice(1)}`,
     steps,
     expected
   };
 }
 
+/**
+ * Build ONE test from ONE Acceptance Criterion.
+ *
+ * IMPORTANT:
+ * Previously this function expanded every AC into:
+ *
+ * Functional
+ * Validation
+ * Security
+ * Performance
+ *
+ * That was incorrect because an AC only describes the behavior it explicitly
+ * contains.
+ *
+ * Example:
+ *
+ * AC-03:
+ * Given Employee List
+ * When click Add Employee
+ * Then Cancel and Save are visible
+ *
+ * becomes ONLY:
+ *
+ * AC-03-FUNCTIONAL
+ */
 function buildAcceptanceCriterionCases(issue, criteria) {
-  const layersToExpand = ['Functional', 'Validation', 'Security', 'Performance'];
+  return criteria.map((criterion, index) => {
+    const parsed = parseAcceptanceCriterion(
+      criterion,
+      index
+    );
 
-  return criteria.flatMap((criterion, index) => {
-    const baseIndex = index + 1;
-    const baseId = `AC-${String(baseIndex).padStart(2, '0')}`;
-    const parsed = parseAcceptanceCriterion(criterion, index);
-    const titleBody = parsed.title.replace(/^Verify\s+/i, '').trim();
+    const baseId =
+      `AC-${String(index + 1).padStart(2, '0')}`;
 
-    // For each AC produce one layer-specific test case with full layer name suffix
-    return layersToExpand.map(layer => ({
-      id: `${baseId}-${layer.toUpperCase()}`,
-      layer,
+    return {
+      id: `${baseId}-${parsed.layer.toUpperCase()}`,
+      layer: parsed.layer,
       source: 'Acceptance Criteria',
-      title: `Verify ${titleBody} (${layer})`,
+      title: parsed.title,
       steps: parsed.steps,
       expected: parsed.expected
-    }));
+    };
   });
 }
 
 function isExplicitLoginStory(issue) {
-  const summary = (issue.summary || '').toLowerCase();
+  const summary =
+    (issue.summary || '').toLowerCase();
 
-  // Only treat the ticket as a login story when the summary itself is clearly
-  // about authentication or sign-in behavior. This avoids misclassifying
-  // unrelated stories that happen to mention login in the description or as a
-  // precondition for a different workflow.
-  return /\b(login|log in|sign in|signin|authentication|authenticate|access management)\b/.test(summary);
+  /*
+   * Only treat the ticket as a login story when the summary itself is
+   * clearly about authentication/sign-in behavior.
+   */
+  return /\b(login|log in|sign in|signin|authentication|authenticate|access management)\b/
+    .test(summary);
 }
 
 function isLoginRequirement(issue) {
   return isExplicitLoginStory(issue);
 }
 
+/**
+ * Identify layers explicitly represented by the Jira requirement.
+ *
+ * Functional is always present.
+ *
+ * IMPORTANT:
+ * "access" by itself is NOT a Security signal.
+ *
+ * Example:
+ * "Verify access Employee List"
+ *
+ * is Functional, not Security.
+ */
 function identifyLayers(text) {
   const t = (text || '').toLowerCase();
-  const result = new Set(['Functional']);
 
-  if (/validat|error|boundary|negative|invalid|constraint|empty|required|missing|incorrect|wrong/.test(t)) {
+  const result = new Set([
+    'Functional'
+  ]);
+
+  if (
+    /validat|error|boundary|negative|invalid|constraint|empty|required|missing|incorrect|wrong/.test(
+      t
+    )
+  ) {
     result.add('Validation');
   }
-  if (/browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/.test(t)) {
+
+  if (
+    /browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/.test(
+      t
+    )
+  ) {
     result.add('Compatibility');
   }
-  if (/security|permission|role|access|authentication|authorization|login|log in|sign in|credential|password|session|unauthori|lockout|brute force|csrf|xss/.test(t)) {
+
+  if (
+    /security|permission|role-based|role based|credential|password|session|unauthori|authorization|access denied|forbidden|lockout|brute force|csrf|xss/.test(
+      t
+    )
+  ) {
     result.add('Security');
   }
-  if (/performance|latency|load|response time|throughput|concurrent|under .* second|seconds?/.test(t)) {
+
+  if (
+    /performance|latency|load time|response time|throughput|concurrent|under .*\ssecond|seconds?/.test(
+      t
+    )
+  ) {
     result.add('Performance');
   }
 
-  return LAYERS.filter(x => result.has(x));
+  return LAYERS.filter(
+    layer => result.has(layer)
+  );
 }
 
-function buildDerivedTestCases(issue, layers, gaps) {
-  const text = `${issue.summary}\n${issue.description}`;
-  const login = isLoginRequirement(issue);
+/**
+ * Determine whether a gap exists by category.
+ *
+ * Gap strings are generated by analyzeRequirement().
+ */
+function hasGap(gaps, pattern) {
+  return (gaps || []).some(
+    gap => pattern.test(gap)
+  );
+}
+
+/**
+ * Build tests ONLY for genuine requirement gaps.
+ *
+ * This function must never create a test merely because a layer exists.
+ *
+ * Example:
+ *
+ * layers = [Functional, Security]
+ *
+ * does NOT mean:
+ *
+ * create SEC-001
+ *
+ * Security test is created only if:
+ *
+ * gaps contains "Security/access-control coverage is not explicit."
+ */
+function buildDerivedTestCases(issue, gaps) {
   const cases = [];
 
-  // Functional coverage
-  if (login) {
-    cases.push({
-      id: 'FUNC-001',
-      layer: 'Functional',
-      source: 'Requirement',
-      title: 'Verify successful login with valid credentials',
-      steps: [
-        'Open the login page.',
-        'Enter valid username/email.',
-        'Enter valid password.',
-        'Click Login/Sign in.'
-      ],
-      expected: 'User is authenticated and redirected to the authenticated landing page.'
-    });
-  } else {
-    cases.push({
-      id: 'FUNC-001',
-      layer: 'Functional',
-      source: 'Requirement',
-      title: `Verify the primary behavior of ${issue.summary}`,
-      steps: [
-        'Open the feature under test.',
-        `Perform the action described by "${issue.summary}".`,
-        'Observe the application response.'
-      ],
-      expected: 'The application performs the requested business behavior according to the Jira acceptance criteria.'
-    });
-  }
+  const login =
+    isLoginRequirement(issue);
 
-  // Gap-driven negative/validation coverage
-  if (gaps.some(g => /negative|boundary/i.test(g)) || login) {
+  /*
+   * ------------------------------------------------------------
+   * VALIDATION GAP
+   * ------------------------------------------------------------
+   */
+  if (
+    hasGap(
+      gaps,
+      /negative\/boundary|validation/i
+    )
+  ) {
     if (login) {
+      /*
+       * Login has enough domain knowledge to safely define these tests.
+       */
       cases.push({
         id: 'VAL-001',
         layer: 'Validation',
@@ -213,8 +426,10 @@ function buildDerivedTestCases(issue, layers, gaps) {
           'Leave password empty.',
           'Click Login/Sign in.'
         ],
-        expected: 'Required-field validation is displayed and authentication is not attempted.'
+        expected:
+          'Required-field validation is displayed and authentication is not attempted.'
       });
+
       cases.push({
         id: 'VAL-002',
         layer: 'Validation',
@@ -226,205 +441,408 @@ function buildDerivedTestCases(issue, layers, gaps) {
           'Enter an invalid password.',
           'Click Login/Sign in.'
         ],
-        expected: 'A safe authentication error is displayed and the user remains unauthenticated.'
+        expected:
+          'A safe authentication error is displayed and the user remains unauthenticated.'
       });
     } else {
+      /*
+       * For a non-login story, do NOT invent a specific field,
+       * selector, or validation message.
+       *
+       * This is intentionally generic because the Jira requirement
+       * did not specify the mandatory fields or expected validation text.
+       */
       cases.push({
         id: 'VAL-001',
         layer: 'Validation',
         source: 'Requirement Gap',
-        title: `Verify negative and boundary validation for ${issue.summary}`,
+        title:
+          `Verify negative and boundary behavior for ${issue.summary}`,
         steps: [
           'Open the feature under test.',
-          'Provide missing, invalid, or boundary input relevant to the requirement.',
-          'Submit the action.'
+          'Identify an applicable missing, invalid, or boundary input based on the feature.',
+          'Submit the operation.'
         ],
-        expected: 'The application rejects invalid input with the correct validation and does not perform the invalid operation.'
+        expected:
+          'The application prevents the invalid operation and provides the appropriate validation behavior defined by the application.'
       });
     }
   }
 
-  // Security coverage for authentication/access-related stories.
-  if (layers.includes('Security')) {
+  /*
+   * ------------------------------------------------------------
+   * SECURITY GAP
+   * ------------------------------------------------------------
+   */
+  if (
+    hasGap(
+      gaps,
+      /security\/access-control/i
+    )
+  ) {
     if (login) {
       cases.push({
         id: 'SEC-001',
         layer: 'Security',
-        source: 'STLC Layer',
-        title: 'Verify unauthenticated user cannot access protected content',
+        source: 'Requirement Gap',
+        title:
+          'Verify unauthenticated user cannot access protected content',
         steps: [
           'Open a protected application URL without an authenticated session.'
         ],
-        expected: 'The application prevents unauthorized access and redirects the user to the login page or an authorized access-denied experience.'
+        expected:
+          'The application prevents unauthorized access and redirects the user to the login page or an authorized access-denied experience.'
       });
+
       cases.push({
         id: 'SEC-002',
         layer: 'Security',
-        source: 'STLC Layer',
-        title: 'Verify password is not exposed in the UI or URL',
+        source: 'Requirement Gap',
+        title:
+          'Verify password is not exposed in the UI or URL',
         steps: [
           'Open the login page.',
           'Enter a password.',
           'Submit or inspect the page URL and visible fields.'
         ],
-        expected: 'Password input is masked and the password is not exposed in the URL or visible page content.'
+        expected:
+          'Password input is masked and the password is not exposed in the URL or visible page content.'
+      });
+    } else {
+      cases.push({
+        id: 'SEC-001',
+        layer: 'Security',
+        source: 'Requirement Gap',
+        title:
+          `Verify authorized access and secure handling for ${issue.summary}`,
+        steps: [
+          'Open the feature with an unauthorized session or role.',
+          'Attempt the protected operation.',
+          'Repeat the operation with an authorized session or role.'
+        ],
+        expected:
+          'Unauthorized access is denied and authorized users can perform the permitted operation without exposing sensitive information.'
       });
     }
   }
 
-  // Compatibility is a recommended STLC layer for UI stories when no explicit browser
-  // coverage exists. It is marked as a derived coverage item rather than pretending it
-  // came from the Jira acceptance criteria.
-  if (login && !layers.includes('Compatibility')) {
-    cases.push({
-      id: 'COMP-001',
-      layer: 'Compatibility',
-      source: 'STLC Recommended Coverage',
-      title: 'Verify login works across supported browsers',
-      steps: [
-        'Open the login page in each supported Playwright browser.',
-        'Authenticate using valid credentials.'
-      ],
-      expected: 'Login behaves consistently across supported browsers.'
-    });
+  /*
+   * ------------------------------------------------------------
+   * COMPATIBILITY GAP
+   * ------------------------------------------------------------
+   */
+  if (
+    hasGap(
+      gaps,
+      /compatibility\/browser/i
+    )
+  ) {
+    if (login) {
+      cases.push({
+        id: 'COMP-001',
+        layer: 'Compatibility',
+        source: 'Requirement Gap',
+        title:
+          'Verify login works across supported browsers',
+        steps: [
+          'Open the login page in each supported Playwright browser.',
+          'Authenticate using valid credentials.'
+        ],
+        expected:
+          'Login behaves consistently across supported browsers.'
+      });
+    } else {
+      cases.push({
+        id: 'COMP-001',
+        layer: 'Compatibility',
+        source: 'Requirement Gap',
+        title:
+          `Verify ${issue.summary} across supported browsers`,
+        steps: [
+          'Open the feature in each supported Playwright browser.',
+          'Execute the primary user flow.'
+        ],
+        expected:
+          'The feature behaves consistently across all supported browsers.'
+      });
+    }
   }
 
-  // The VantaQA STLC diagram explicitly covers all five test layers.
-  // Generate a baseline test for every layer, marking inferred coverage as
-  // STLC Recommended Coverage when Jira did not explicitly mention it.
-  if (!cases.some(tc => tc.layer === 'Compatibility')) {
-    cases.push({
-      id: 'COMP-001',
-      layer: 'Compatibility',
-      source: 'STLC Recommended Coverage',
-      title: `Verify ${issue.summary} across supported browsers`,
-      steps: [
-        'Open the feature in each supported Playwright browser.',
-        'Execute the primary user flow.'
-      ],
-      expected: 'The feature behaves consistently across supported browsers.'
-    });
-  }
-
-  if (!cases.some(tc => tc.layer === 'Security')) {
-    cases.push({
-      id: 'SEC-001',
-      layer: 'Security',
-      source: 'STLC Recommended Coverage',
-      title: `Verify authorized access and secure handling for ${issue.summary}`,
-      steps: [
-        'Open the feature without an authorized session/role.',
-        'Attempt the protected operation.',
-        'Repeat with an authorized session/role.'
-      ],
-      expected: 'Unauthorized access is denied and authorized users can perform the operation without exposing sensitive data.'
-    });
-  }
-
-  if (!cases.some(tc => tc.layer === 'Performance')) {
+  /*
+   * ------------------------------------------------------------
+   * PERFORMANCE GAP
+   * ------------------------------------------------------------
+   */
+  if (
+    hasGap(
+      gaps,
+      /performance\/response-time/i
+    )
+  ) {
     cases.push({
       id: 'PERF-001',
       layer: 'Performance',
-      source: 'STLC Recommended Coverage',
-      title: `Verify acceptable response time for ${issue.summary}`,
+      source: 'Requirement Gap',
+      title:
+        `Verify acceptable response time for ${issue.summary}`,
       steps: [
         'Open the feature under test.',
         'Perform the primary operation.',
         'Measure the response time.'
       ],
-      expected: 'The operation completes within the response-time target defined by the requirement or agreed performance baseline.'
+      expected:
+        'The operation completes within the response-time target defined by the requirement or agreed performance baseline.'
     });
   }
 
-  if (!cases.some(tc => tc.layer === 'Validation')) {
-    cases.push({
-      id: 'VAL-001',
-      layer: 'Validation',
-      source: 'STLC Recommended Coverage',
-      title: `Verify invalid and boundary input validation for ${issue.summary}`,
-      steps: [
-        'Open the feature under test.',
-        'Provide missing, invalid, and boundary input where applicable.',
-        'Submit the operation.'
-      ],
-      expected: 'Invalid input is rejected with the correct validation and the application does not perform an invalid operation.'
-    });
-  }
-
-  // De-duplicate IDs in case explicit and inferred rules generated the same layer.
+  /*
+   * Remove exact duplicates.
+   */
   const seen = new Set();
-  return cases.filter(tc => {
-    const key = `${tc.id}:${tc.title}`;
-    if (seen.has(key)) return false;
+
+  return cases.filter(testCase => {
+    const key =
+      `${testCase.id}:${testCase.title}`;
+
+    if (seen.has(key)) {
+      return false;
+    }
+
     seen.add(key);
     return true;
   });
 }
 
+/**
+ * Analyze the Jira requirement.
+ *
+ * Design:
+ *
+ * 1. Acceptance Criteria are authoritative.
+ * 2. Each AC produces exactly one requirement-derived test.
+ * 3. Additional STLC tests are created only when an actual gap exists.
+ * 4. A gap must never mutate an existing AC into another layer.
+ */
 function analyzeRequirement(issue, options = {}) {
-  const text = `${issue.summary}\n${issue.description}`;
-  const scenarios = splitScenarios(text);
-  const acceptanceCriteria = extractAcceptanceCriteria(text);
+  const text =
+    `${issue.summary || ''}\n${issue.description || ''}`;
+
+  const scenarios =
+    splitScenarios(text);
+
+  const acceptanceCriteria =
+    extractAcceptanceCriteria(text);
+
   const gaps = [];
 
+  /*
+   * ------------------------------------------------------------
+   * ACCEPTANCE CRITERIA GAP
+   * ------------------------------------------------------------
+   */
   if (!acceptanceCriteria.length) {
-    gaps.push('Acceptance criteria or explicit expected behavior is missing.');
-  }
-  if (!acceptanceCriteria.some(c => /error|invalid|negative|boundary|empty|required|exception/i.test(c))) {
-    gaps.push('Negative/boundary scenarios are not explicit.');
-  }
-  if (!acceptanceCriteria.some(c => /security|permission|role|access|authentication|authorization|login|credential|password|session|unauthori/i.test(c))) {
-    gaps.push('Security/access-control coverage is not explicit.');
-  }
-  if (!acceptanceCriteria.some(c => /browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/i.test(c))) {
-    gaps.push('Compatibility/browser coverage is not explicit.');
-  }
-  if (!acceptanceCriteria.some(c => /performance|latency|load|response time|throughput|concurrent|under .* second|seconds?/i.test(c))) {
-    gaps.push('Performance/response-time coverage is not explicit.');
+    gaps.push(
+      'Acceptance criteria or explicit expected behavior is missing.'
+    );
   }
 
-  const layers = identifyLayers(text);
-  // Always include derived STLC coverage. When acceptance criteria exist,
-  // generate one test per AC and also add the derived baseline layer cases
-  // (Functional/Validation/Compatibility/Security/Performance) to ensure
-  // every Jira story has STLC-recommended coverage and negative/validation
-  // scenarios even if the ACs are specific.
-  const expandAC = options.expandAC !== false;
-  const acCases = acceptanceCriteria.length
-    ? (expandAC ? buildAcceptanceCriterionCases(issue, acceptanceCriteria) : acceptanceCriteria.map((c, i) => parseAcceptanceCriterion(c, i)))
+  /*
+   * ------------------------------------------------------------
+   * VALIDATION GAP
+   * ------------------------------------------------------------
+   *
+   * Only look for actual validation language.
+   *
+   * "Click Add Employee" does not satisfy this,
+   * and that is correct: it means validation coverage is missing.
+   *
+   * But that missing coverage is represented as VAL-001,
+   * NOT AC-03-VALIDATION.
+   */
+  if (
+    !acceptanceCriteria.some(c =>
+      /error|invalid|negative|boundary|empty|required|exception|validation/i.test(
+        c
+      )
+    )
+  ) {
+    gaps.push(
+      'Negative/boundary scenarios are not explicit.'
+    );
+  }
+
+  /*
+   * ------------------------------------------------------------
+   * SECURITY GAP
+   * ------------------------------------------------------------
+   *
+   * Do NOT use plain "access" as proof of security coverage.
+   */
+  if (
+    !acceptanceCriteria.some(c =>
+      /security|permission|role-based|role based|authorization|unauthori|credential|password|session|access denied|forbidden/i.test(
+        c
+      )
+    )
+  ) {
+    gaps.push(
+      'Security/access-control coverage is not explicit.'
+    );
+  }
+
+  /*
+   * ------------------------------------------------------------
+   * COMPATIBILITY GAP
+   * ------------------------------------------------------------
+   */
+  if (
+    !acceptanceCriteria.some(c =>
+      /browser|chrome|firefox|webkit|responsive|mobile|compatib|cross[- ]browser/i.test(
+        c
+      )
+    )
+  ) {
+    gaps.push(
+      'Compatibility/browser coverage is not explicit.'
+    );
+  }
+
+  /*
+   * ------------------------------------------------------------
+   * PERFORMANCE GAP
+   * ------------------------------------------------------------
+   */
+  if (
+    !acceptanceCriteria.some(c =>
+      /performance|latency|load|response time|throughput|concurrent|under .* second|seconds?/i.test(
+        c
+      )
+    )
+  ) {
+    gaps.push(
+      'Performance/response-time coverage is not explicit.'
+    );
+  }
+
+  /*
+   * Identify layers explicitly represented by the Jira requirement.
+   *
+   * This is informational now.
+   *
+   * It is NOT used to blindly generate tests.
+   */
+  const layers =
+    identifyLayers(text);
+
+  /*
+   * ------------------------------------------------------------
+   * AC TEST CASES
+   * ------------------------------------------------------------
+   *
+   * expandAC remains supported for CLI compatibility.
+   *
+   * It no longer means "expand into every STLC layer".
+   * It simply controls whether AC-derived test objects are generated.
+   */
+  const expandAC =
+    options.expandAC !== false;
+
+  const acCases = acceptanceCriteria.length && expandAC
+    ? buildAcceptanceCriterionCases(
+        issue,
+        acceptanceCriteria
+      )
     : [];
-  const derived = buildDerivedTestCases(issue, layers, gaps);
 
-  // Merge but avoid exact duplicate (id + title) collisions.
+  /*
+   * ------------------------------------------------------------
+   * GAP-DERIVED TEST CASES
+   * ------------------------------------------------------------
+   *
+   * This is now strictly driven by `gaps`.
+   */
+  const derived =
+    buildDerivedTestCases(
+      issue,
+      gaps
+    );
+
+  /*
+   * ------------------------------------------------------------
+   * MERGE
+   * ------------------------------------------------------------
+   */
   const seen = new Set();
   const merged = [];
-  for (const tc of [...acCases, ...derived]) {
-    const key = `${tc.id}:${tc.title}`;
-    if (seen.has(key)) continue;
+
+  for (const testCase of [
+    ...acCases,
+    ...derived
+  ]) {
+    const key =
+      `${testCase.id}:${testCase.title}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
     seen.add(key);
-    merged.push(tc);
+    merged.push(testCase);
   }
 
-  // If we expanded ACs into per-AC functional cases, suppress the generic
-  // derived `FUNC-001` to avoid duplication of functional coverage.
-  const hasPerAcFunctional = merged.some(tc => /AC-\d+-FUNCTIONAL$/i.test(tc.id));
-  const final = hasPerAcFunctional ? merged.filter(tc => !(tc.id === 'FUNC-001' && tc.layer === 'Functional')) : merged;
+  const testCases = merged;
 
-  const testCases = final;
+  /*
+   * The generated test cases are now the authoritative layer output.
+   *
+   * Example SCRUM-2:
+   *
+   * AC-01-FUNCTIONAL
+   * AC-02-FUNCTIONAL
+   * AC-03-FUNCTIONAL
+   * VAL-001
+   * COMP-001
+   * SEC-001
+   * PERF-001
+   */
+  const generatedLayers =
+    unique(
+      testCases.map(
+        testCase => testCase.layer
+      )
+    );
 
-  // The test matrix is the authoritative layer output. Ensure each layer represented
-  // by a generated case is visible even when the original Jira text did not name it.
-  const generatedLayers = unique(testCases.map(tc => tc.layer));
   return {
     scenarios,
     acceptanceCriteria,
     gaps,
-    layers: LAYERS.filter(layer => generatedLayers.includes(layer)),
+
+    /*
+     * Keep only layers that are actually represented
+     * by generated test cases.
+     */
+    layers: LAYERS.filter(
+      layer =>
+        generatedLayers.includes(layer)
+    ),
+
     testCases,
-    automationFeasible: !/manual only|cannot automate|not automatable/i.test(text),
-    reusableComponent: isLoginRequirement(issue),
-    recommendation: 'Automate deterministic UI/API-verifiable behavior; keep exploratory/manual-only behavior in Jira.'
+
+    automationFeasible:
+      !/manual only|cannot automate|not automatable/i.test(
+        text
+      ),
+
+    reusableComponent:
+      isLoginRequirement(issue),
+
+    recommendation:
+      'Automate deterministic UI/API-verifiable behavior; keep exploratory/manual-only behavior in Jira.'
   };
 }
 
-module.exports = { analyzeRequirement, identifyLayers, isLoginRequirement };
+module.exports = {
+  analyzeRequirement,
+  identifyLayers,
+  isLoginRequirement
+};
