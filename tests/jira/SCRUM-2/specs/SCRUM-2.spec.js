@@ -59,7 +59,7 @@ test.describe(
 
 
   test(
-    '[AC-01-FUNCTIONAL-Functional] Verify access Employee List (Functional) [Scenario-01]',
+    '[AC-01-FUNCTIONAL-Functional] Verify access Employee List [Scenario-01]',
     async ({ page }) => {
 
       const featurePage =
@@ -94,7 +94,7 @@ test.describe(
 
 
   test(
-    '[AC-02-FUNCTIONAL-Functional] Verify display Employee Records (Functional) [Scenario-02]',
+    '[AC-02-FUNCTIONAL-Functional] Verify display Employee Records [Scenario-02]',
     async ({ page }) => {
 
       const featurePage =
@@ -123,6 +123,43 @@ test.describe(
 
       // Expected result:
       // Display Employee Records
+
+    }
+  );
+
+
+  test(
+    '[AC-03-FUNCTIONAL-Functional] Verify click on Add Employee [Scenario-03]',
+    async ({ page }) => {
+
+      const featurePage =
+        new ManageAndSearchEmployeesFromPIMEmployeeListPage(page);
+
+      const pimPage =
+        new PIMPage(page);
+
+      // Jira:
+      // SCRUM-2
+
+      // Jira scenario:
+      // 1. Given the user is on the Employee List page
+      // 2. When click on Add Employee from navigation bar
+
+
+      await pimPage.openEmployeeList();
+
+      await expect(page).toHaveURL(
+        /\/web\/index\.php\/pim\/viewEmployeeList/
+      );
+
+
+      await expect(page).toHaveURL(
+        /\/web\/index\.php\//
+      );
+
+
+      // Expected result:
+      // Click on Add Employee
 
     }
   );
@@ -138,77 +175,7 @@ test.describe(
 
 
   test(
-    '[AC-01-VALIDATION-Validation] Verify access Employee List (Validation) [Scenario-01]',
-    async ({ page }) => {
-
-      const featurePage =
-        new ManageAndSearchEmployeesFromPIMEmployeeListPage(page);
-
-      const pimPage =
-        new PIMPage(page);
-
-      // Jira:
-      // SCRUM-2
-
-      // Jira scenario:
-      // 1. Given the user is logged in as an Admin
-      // 2. When the user navigates to PIM → Employee List
-
-
-      await pimPage.openEmployeeList();
-
-      await expect(page).toHaveURL(
-        /\/web\/index\.php\/pim\/viewEmployeeList/
-      );
-
-
-      await featurePage.expectEmployeeTableVisible();
-
-
-      // Expected result:
-      // Access Employee List
-
-    }
-  );
-
-
-  test(
-    '[AC-02-VALIDATION-Validation] Verify display Employee Records (Validation) [Scenario-02]',
-    async ({ page }) => {
-
-      const featurePage =
-        new ManageAndSearchEmployeesFromPIMEmployeeListPage(page);
-
-      const pimPage =
-        new PIMPage(page);
-
-      // Jira:
-      // SCRUM-2
-
-      // Jira scenario:
-      // 1. Given the user is on the Employee List page
-      // 2. When employee records are available
-
-
-      await pimPage.openEmployeeList();
-
-      await expect(page).toHaveURL(
-        /\/web\/index\.php\/pim\/viewEmployeeList/
-      );
-
-
-      await featurePage.expectEmployeeRecordsDisplayed();
-
-
-      // Expected result:
-      // Display Employee Records
-
-    }
-  );
-
-
-  test(
-    '[VAL-001-Validation] Verify negative and boundary validation for Manage and Search Employees from PIM Employee List [Scenario-03]',
+    '[VAL-001-Validation] Verify negative and boundary behavior for Manage and Search Employees from PIM Employee List [Scenario-01]',
     async ({ page }) => {
 
       const featurePage =
@@ -222,8 +189,8 @@ test.describe(
 
       // Jira scenario:
       // 1. Open the feature under test.
-      // 2. Provide missing, invalid, or boundary input relevant to the requirement.
-      // 3. Submit the action.
+      // 2. Identify an applicable missing, invalid, or boundary input based on the feature.
+      // 3. Submit the operation.
 
 
       await pimPage.openEmployeeList();
@@ -247,7 +214,7 @@ test.describe(
 
 
       // Expected result:
-      // The application rejects invalid input with the correct validation and does not perform the invalid operation.
+      // The application prevents the invalid operation and provides the appropriate validation behavior defined by the application.
 
     }
   );

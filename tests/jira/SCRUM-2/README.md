@@ -36,20 +36,19 @@ Reusable PIM navigation is supplied by:
 
 ## Test Cases
 
-1. [AC-01-FUNCTIONAL][Functional] Verify access Employee List (Functional)
+1. [AC-01-FUNCTIONAL][Functional] Verify access Employee List
    - Expected: Access Employee List
-2. [AC-01-VALIDATION][Validation] Verify access Employee List (Validation)
-   - Expected: Access Employee List
-3. [AC-02-FUNCTIONAL][Functional] Verify display Employee Records (Functional)
+2. [AC-02-FUNCTIONAL][Functional] Verify display Employee Records
    - Expected: Display Employee Records
-4. [AC-02-VALIDATION][Validation] Verify display Employee Records (Validation)
-   - Expected: Display Employee Records
-5. [VAL-001][Validation] Verify negative and boundary validation for  Manage and Search Employees from PIM Employee List
-   - Expected: The application rejects invalid input with the correct validation and does not perform the invalid operation.
+3. [AC-03-FUNCTIONAL][Functional] Verify click on Add Employee
+   - Expected: Click on Add Employee
+4. [VAL-001][Validation] Verify negative and boundary behavior for  Manage and Search Employees from PIM Employee List
+   - Expected: The application prevents the invalid operation and provides the appropriate validation behavior defined by the application.
 
 ## Requirement Gaps
 
 - Negative/boundary scenarios are not explicit.
+- Security/access-control coverage is not explicit.
 - Compatibility/browser coverage is not explicit.
 - Performance/response-time coverage is not explicit.
 
