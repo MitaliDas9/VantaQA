@@ -96,9 +96,10 @@ jobs:
       # --------------------------------------------------------- 
       # EMAIL REPORT 
       # --------------------------------------------------------- 
-      - name: Send Gmail report 
-        if: always() 
-        run: npm run ci:report 
+      - name: Send Gmail report
+        if: always()
+        continue-on-error: true
+        run: npm run ci:report
  
       # --------------------------------------------------------- 
       # UPLOAD PLAYWRIGHT REPORT 
